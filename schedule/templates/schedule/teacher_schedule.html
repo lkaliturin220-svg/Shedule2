@@ -1,0 +1,72 @@
+{% extends "schedule/base.html" %}
+{% load schedule_tags %}
+{% block title %}{{ teacher.name }} — Расписание{% endblock %}
+{% block content %}
+
+<div class="breadcrumb">
+  <a href="{% url 'schedule:index' %}">Главная</a> / Преподаватели / {{ teacher.name }}
+</div>
+
+<div class="page-header">
+  <h1>{{ teacher.name }}</h1>
+  <p>Расписание преподавателя</p>
+</div>
+
+<div class="card">
+  {% if dates %}
+    <form method="get" class="date-form">
+      <label for="date-sel">📅 Дата:</label>
+      <select name="date" id="date-sel" onchange="this.form.submit()">
+        {% for d in dates %}
+          <option value="{{ d|date:'Y-m-d' }}" {% if d == selected_date %}selected{% endif %}>
+            {{ d|date:"d.m.Y" }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
+  {% endif %}
+
+  {% if lessons %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Пара</th>
+            <th>Дисциплина</th>
+            <th>Группа</th>
+            <th>Аудитория</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in lessons %}
+          <tr>
+            <td>
+              <div class="pair-cell">
+                <span class="badge-pair">{{ l.pair_number }}</span>
+                {% if l.subgroup %}<span class="badge-sub">пг {{ l.subgroup }}</span>{% endif %}
+                <span class="pair-time">{{ l.pair_number|pair_time }}</span>
+              </div>
+            </td>
+            <td>{{ l.subject.name }}</td>
+            <td>
+              <a href="{% url 'schedule:group' l.group.name %}">{{ l.group.name }}</a>
+            </td>
+            <td>
+              <span class="badge-room {% if l.room == 'Сам.изуч.' %}remote{% endif %}">
+                {{ l.room|default:"—" }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📭</div>
+      <p>Нет занятий на выбранную дату</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

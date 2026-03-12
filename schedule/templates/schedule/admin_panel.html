@@ -1,0 +1,112 @@
+{% extends "schedule/base.html" %}
+{% block title %}Панель управления{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Панель управления</h1>
+  <p>Загрузка расписания и статистика</p>
+</div>
+
+<!-- Upload -->
+<div class="card">
+  <h2>📤 Загрузить расписание</h2>
+  <div class="upload-zone" id="drop-zone">
+    <form method="post" action="{% url 'schedule:upload' %}" enctype="multipart/form-data" id="upload-form">
+      {% csrf_token %}
+      <input type="file" name="xlsx_file" id="xlsx_file" accept=".xlsx,.xls">
+      <label for="xlsx_file">
+        <div class="upload-icon">📊</div>
+        <strong>Выберите файл</strong> или перетащите сюда
+        <p>Поддерживаются файлы .xlsx в формате studentam_ДД.ММ.ГГГГ.xlsx</p>
+      </label>
+      <div id="file-name" style="margin-top:12px;color:var(--muted);font-size:.875rem;"></div>
+      <button type="submit" class="btn btn-primary" style="margin-top:16px;" id="upload-btn">
+        Загрузить
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="card">
+  <h2>📊 Статистика</h2>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="num">{{ stats.groups }}</div><div class="lbl">Групп</div></div>
+    <div class="stat-card"><div class="num">{{ stats.teachers }}</div><div class="lbl">Преподавателей</div></div>
+    <div class="stat-card"><div class="num">{{ stats.subjects }}</div><div class="lbl">Дисциплин</div></div>
+    <div class="stat-card"><div class="num">{{ stats.lessons }}</div><div class="lbl">Занятий</div></div>
+    <div class="stat-card"><div class="num">{{ stats.dates }}</div><div class="lbl">Дат</div></div>
+  </div>
+</div>
+
+<!-- Date list -->
+{% if date_stats %}
+<div class="card">
+  <h2>📅 Загруженные расписания</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>День</th>
+          <th>Занятий</th>
+          <th>Групп</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ds in date_stats %}
+        <tr>
+          <td><strong>{{ ds.date|date:"d.m.Y" }}</strong></td>
+          <td>{{ ds.day_of_week }}</td>
+          <td>{{ ds.lessons }}</td>
+          <td>{{ ds.groups }}</td>
+          <td>
+            <form method="post" action="{% url 'schedule:delete_date' %}" style="display:inline"
+                  onsubmit="return confirm('Удалить расписание за {{ ds.date|date:\"d.m.Y\" }}?')">
+              {% csrf_token %}
+              <input type="hidden" name="date" value="{{ ds.date|date:'Y-m-d' }}">
+              <button type="submit" class="btn btn-danger btn-sm">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>🔗 Ссылки</h2>
+  <p><a href="/admin/">Django Admin →</a></p>
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+const inp = document.getElementById('xlsx_file');
+const fname = document.getElementById('file-name');
+inp.addEventListener('change', function() {
+  fname.textContent = this.files[0] ? '📎 ' + this.files[0].name : '';
+});
+
+// Drag & drop
+const dz = document.getElementById('drop-zone');
+['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => {
+  ev.preventDefault(); dz.style.borderColor = 'var(--primary)';
+}));
+['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => {
+  ev.preventDefault(); dz.style.borderColor = '';
+}));
+dz.addEventListener('drop', ev => {
+  const f = ev.dataTransfer.files[0];
+  if (f) {
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    inp.files = dt.files;
+    fname.textContent = '📎 ' + f.name;
+  }
+});
+</script>
+{% endblock %}

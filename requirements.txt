@@ -1,0 +1,11 @@
+Django>=4.2,<5.1
+gunicorn>=22.0
+django-redis>=5.4
+redis>=5.0
+whitenoise>=6.5
+openpyxl>=3.1
+python-dotenv>=1.0
+aiogram>=3.4
+psycopg2-binary>=2.9
+dj-database-url>=2.1
+aiohttp>=3.9

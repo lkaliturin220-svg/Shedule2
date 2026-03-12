@@ -1,0 +1,15 @@
+[Unit]
+Description=Telegram Bot — Schedule
+After=network.target schedule-web.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/schedule
+EnvironmentFile=/opt/schedule/.env
+ExecStart=/opt/schedule/venv/bin/python manage.py start_tgbot
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

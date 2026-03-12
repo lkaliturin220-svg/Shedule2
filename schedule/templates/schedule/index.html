@@ -1,0 +1,57 @@
+{% extends "schedule/base.html" %}
+{% block title %}Расписание занятий{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Расписание занятий</h1>
+  <p>Выберите группу или преподавателя для просмотра расписания</p>
+</div>
+
+<div class="card">
+  <h2>📚 Группы</h2>
+  <div class="search-box">
+    <input type="text" id="sg" placeholder="Поиск группы…" oninput="filterList('sg','gg')" autocomplete="off">
+  </div>
+  {% if groups %}
+    <div class="entity-grid" id="gg">
+      {% for g in groups %}
+        <a href="{% url 'schedule:group' g.name %}">{{ g.name }}</a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📭</div>
+      <p>Расписание ещё не загружено</p>
+    </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>👨‍🏫 Преподаватели</h2>
+  <div class="search-box">
+    <input type="text" id="st" placeholder="Поиск преподавателя…" oninput="filterList('st','tg')" autocomplete="off">
+  </div>
+  {% if teachers %}
+    <div class="entity-grid" id="tg">
+      {% for t in teachers %}
+        <a href="{% url 'schedule:teacher' t.id %}">{{ t.name }}</a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📭</div>
+      <p>Нет данных</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+function filterList(inputId, gridId) {
+  const q = document.getElementById(inputId).value.toLowerCase();
+  for (const el of document.getElementById(gridId).children)
+    el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Gunicorn — Schedule Django
+After=network.target postgresql.service redis.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/schedule
+EnvironmentFile=/opt/schedule/.env
+ExecStart=/opt/schedule/venv/bin/gunicorn -c gunicorn.conf.py config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
