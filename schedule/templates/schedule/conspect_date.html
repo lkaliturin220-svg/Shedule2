@@ -1,0 +1,86 @@
+{% extends "schedule/base.html" %}
+{% block title %}{{ cdate }} — Конспекты{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="{% url 'schedule:conspect_list' %}">📚 Конспекты</a>
+  <span class="bc-sep">›</span>
+  <a href="{% url 'schedule:conspect_subject' cdate.subject.pk %}">{{ cdate.subject.name }}</a>
+  <span class="bc-sep">›</span>
+  <span>{{ cdate.date|date:"d.m.Y" }}</span>
+</nav>
+
+<div class="page-header">
+  <h1>{{ cdate.subject.name }}</h1>
+  <p class="subtitle">📅 {{ cdate.date|date:"d.m.Y" }}</p>
+</div>
+
+<div class="conspect-toolbar">
+  <a href="{% url 'schedule:conspect_upload' %}?subject={{ cdate.subject.name|urlencode }}&date={{ cdate.date|date:'Y-m-d' }}"
+     class="btn btn-primary">
+    ➕ Добавить материал
+  </a>
+</div>
+
+{% if conspects %}
+  <div class="files-grid">
+    {% for c in conspects %}
+      <div class="file-card">
+
+        <div class="file-card__header">
+          <span class="file-type-badge type-{{ c.file_type }}">
+            {% if c.file_type == "conspect" %}📝 Конспект
+            {% elif c.file_type == "hw" %}✏️ ДЗ
+            {% else %}📎 Другое{% endif %}
+          </span>
+          {% if c.group %}
+            <span class="file-group-badge">{{ c.group }}</span>
+          {% endif %}
+        </div>
+
+        <div class="file-card__body">
+          <div class="file-card__author">
+            <span class="author-icon">👤</span>
+            {{ c.author_name }}
+          </div>
+          {% if c.description %}
+            <div class="file-card__desc">{{ c.description }}</div>
+          {% endif %}
+        </div>
+
+        <div class="file-card__footer">
+          <div class="file-card__info">
+            <span class="file-ext ext-{{ c.file_ext }}">{{ c.file_ext|upper }}</span>
+            <span class="file-date">{{ c.uploaded_at|date:"d.m.Y H:i" }}</span>
+          </div>
+          <div class="file-card__actions">
+            <a href="{{ c.file.url }}" class="btn btn-download" download target="_blank">
+              ⬇️ Скачать
+            </a>
+            {% if user.is_authenticated %}
+              {% if c.author == user or user.is_superuser %}
+                <form method="post" action="{% url 'schedule:conspect_delete' c.pk %}"
+                      style="display:inline"
+                      onsubmit="return confirm('Удалить этот конспект?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn-delete" title="Удалить">🗑️</button>
+                </form>
+              {% endif %}
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📂</div>
+    <div class="empty-text">Пока никто не загрузил материалы за эту дату</div>
+    <a href="{% url 'schedule:conspect_upload' %}?subject={{ cdate.subject.name|urlencode }}&date={{ cdate.date|date:'Y-m-d' }}"
+       class="btn btn-primary" style="margin-top:16px">
+      Загрузить первым
+    </a>
+  </div>
+{% endif %}
+{% endblock %}

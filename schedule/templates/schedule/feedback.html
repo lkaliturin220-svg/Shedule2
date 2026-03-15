@@ -1,0 +1,47 @@
+{% extends "schedule/base.html" %}
+{% block title %}Обратная связь{% endblock %}
+
+{% block content %}
+<div class="feedback-page">
+  <h1>Обратная связь</h1>
+  <p class="feedback-sub">Нашли баг? Есть идея? Напишите — сообщение придёт автору в Telegram.</p>
+
+  <form method="post" class="feedback-form">
+    {% csrf_token %}
+
+    <div class="form-group">
+      <label>Категория</label>
+      <div class="category-btns">
+        <label class="cat-btn">
+          <input type="radio" name="category" value="bug">
+          <span>🐛 Баг / ошибка</span>
+        </label>
+        <label class="cat-btn">
+          <input type="radio" name="category" value="idea">
+          <span>💡 Идея / предложение</span>
+        </label>
+        <label class="cat-btn">
+          <input type="radio" name="category" value="other" checked>
+          <span>📨 Другое</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="text">Сообщение <span class="required">*</span></label>
+      <textarea id="text" name="text" rows="5" placeholder="Опишите проблему или идею..." required></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="contact">Контакт <span class="optional">(необязательно)</span></label>
+      <input type="text" id="contact" name="contact" placeholder="Telegram @username или email" maxlength="100">
+    </div>
+
+    <button type="submit" class="btn-submit">Отправить</button>
+  </form>
+
+  <div class="feedback-footer">
+    Или напишите напрямую: <a href="https://t.me/TIRED_Kiwi" target="_blank">@TIRED_Kiwi</a>
+  </div>
+</div>
+{% endblock %}

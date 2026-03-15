@@ -1,0 +1,51 @@
+{% extends "schedule/base.html" %}
+{% block title %}{{ subject.name }} — Конспекты{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="{% url 'schedule:conspect_list' %}">📚 Конспекты</a>
+  <span class="bc-sep">›</span>
+  <span>{{ subject.name }}</span>
+</nav>
+
+<div class="page-header">
+  <h1>{{ subject.name }}</h1>
+  <p class="subtitle">Выберите дату занятия</p>
+</div>
+
+<div class="conspect-toolbar">
+  <a href="{% url 'schedule:conspect_upload' %}?subject={{ subject.name|urlencode }}"
+     class="btn btn-primary">
+    ➕ Загрузить материал
+  </a>
+</div>
+
+{% if dates %}
+  <div class="dates-list">
+    {% for d in dates %}
+      <a href="{% url 'schedule:conspect_date' d.pk %}" class="date-row">
+        <div class="date-row__left">
+          <span class="date-row__icon">📅</span>
+          <span class="date-row__date">{{ d.date|date:"d.m.Y" }}</span>
+          <span class="date-row__dow">{{ d.date|date:"l" }}</span>
+        </div>
+        <div class="date-row__right">
+          <span class="date-row__count">
+            {{ d.conspects.count }} файл{% if d.conspects.count == 1 %}{% elif d.conspects.count >= 2 and d.conspects.count <= 4 %}а{% else %}ов{% endif %}
+          </span>
+          <span class="date-row__arrow">›</span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📅</div>
+    <div class="empty-text">Нет загруженных материалов по этому предмету</div>
+    <a href="{% url 'schedule:conspect_upload' %}?subject={{ subject.name|urlencode }}"
+       class="btn btn-primary" style="margin-top:16px">
+      Загрузить первым
+    </a>
+  </div>
+{% endif %}
+{% endblock %}

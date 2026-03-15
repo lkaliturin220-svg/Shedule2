@@ -24,12 +24,17 @@
     </a>
     <div class="nav-links">
       <a href="{% url 'schedule:index' %}" class="{% if request.resolver_match.url_name == 'index' %}active{% endif %}">Главная</a>
+      <a href="{% url 'schedule:conspect_list' %}" class="{% if 'conspect' in request.resolver_match.url_name %}active{% endif %}">📚 Конспекты</a>
+      <a href="{% url 'schedule:feedback' %}" class="{% if request.resolver_match.url_name == 'feedback' %}active{% endif %}">💬 Обратная связь</a>
       {% if user.is_authenticated %}
-        <a href="{% url 'schedule:admin_panel' %}" class="{% if request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">Панель</a>
-        <span class="nav-user">{{ user.username }}</span>
-        <a href="{% url 'logout' %}">Выйти</a>
+        {% if user.is_staff or user.is_superuser %}
+          <a href="{% url 'schedule:admin_panel' %}" class="{% if request.resolver_match.url_name == 'admin_panel' %}active{% endif %}">Панель</a>
+        {% endif %}
+        <span class="nav-user">👤 {{ user.username }}{% if user.student_profile.group %} ({{ user.student_profile.group }}){% endif %}</span>
+        <a href="{% url 'schedule:student_logout' %}">Выйти</a>
       {% else %}
-        <a href="{% url 'login' %}">Войти</a>
+        <a href="{% url 'schedule:student_login' %}">Войти</a>
+        <a href="{% url 'schedule:student_register' %}" class="btn-nav-register">Регистрация</a>
       {% endif %}
       <button id="theme-btn" class="theme-btn" title="Сменить тему">🖥️</button>
     </div>
@@ -50,7 +55,14 @@
 </main>
 
 <footer class="footer">
-  Расписание &copy; 2026
+  <div class="footer-inner">
+    <span>Неофициальный студенческий проект &mdash; не является официальным ресурсом КГТТ</span>
+    <span class="footer-links">
+      <a href="{% url 'schedule:terms' %}">Пользовательское соглашение</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://kemgtt.kemobl.ru/" target="_blank" rel="noopener">Официальный сайт</a>
+    </span>
+  </div>
 </footer>
 
 {% block extra_js %}{% endblock %}

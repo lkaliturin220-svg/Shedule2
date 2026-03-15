@@ -1,0 +1,154 @@
+{% extends "schedule/base.html" %}
+{% block title %}Загрузить материал{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb">
+  <a href="{% url 'schedule:conspect_list' %}">📚 Конспекты</a>
+  <span class="bc-sep">›</span>
+  <span>Загрузить</span>
+</nav>
+
+<div class="page-header">
+  <h1>➕ Загрузить материал</h1>
+  {% if user_group %}
+    <p class="subtitle">Файл будет виден группе <strong>{{ user_group }}</strong></p>
+  {% else %}
+    <p class="subtitle">Загрузи конспект, ДЗ или любой полезный файл</p>
+  {% endif %}
+</div>
+
+<div class="upload-card">
+  <form method="post" enctype="multipart/form-data" id="upload-form">
+    {% csrf_token %}
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="subject_name">Предмет *</label>
+        {% if schedule_subjects %}
+          <select id="subject_name" name="subject_name" required>
+            <option value="">— выберите предмет —</option>
+            {% for s in schedule_subjects %}
+              <option value="{{ s.name }}"
+                {% if post.subject_name == s.name %}selected{% endif %}>
+                {{ s.name }}
+              </option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">Предметы из расписания вашей группы</div>
+        {% else %}
+          <div class="upload-no-subjects">
+            ⚠️ У вашей группы пока нет загруженного расписания.
+            Обратитесь к администратору.
+          </div>
+          <input type="hidden" name="subject_name" value="">
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label for="date">Дата занятия *</label>
+        <input type="date" id="date" name="date"
+               value="{{ post.date|default:'' }}" required>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="author_name">Ваше имя *</label>
+        <input type="text" id="author_name" name="author_name"
+               value="{{ post.author_name|default:'' }}"
+               placeholder="Например: Иван" required>
+      </div>
+
+      <div class="form-group">
+        <label for="file_type">Тип материала</label>
+        <select id="file_type" name="file_type">
+          <option value="conspect" {% if post.file_type == "conspect" or not post.file_type %}selected{% endif %}>📝 Конспект</option>
+          <option value="hw"       {% if post.file_type == "hw" %}selected{% endif %}>✏️ Домашнее задание</option>
+          <option value="other"    {% if post.file_type == "other" %}selected{% endif %}>📎 Другое</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="description">Описание <span class="optional">(необязательно)</span></label>
+      <input type="text" id="description" name="description"
+             value="{{ post.description|default:'' }}"
+             placeholder="Например: Параграф 5, стр. 45-50">
+    </div>
+
+    <div class="form-group">
+      <label>Файл * <span class="optional">PDF, JPG, PNG, DOCX, TXT, ZIP — макс. 20 МБ</span></label>
+      <label class="file-drop" id="file-drop">
+        <input type="file" id="file" name="file" required
+               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.docx,.doc,.txt,.zip"
+               style="display:none">
+        <div class="file-drop__content" id="file-drop-content">
+          <div class="file-drop__icon">📎</div>
+          <div class="file-drop__text">Нажмите или перетащите файл</div>
+          <div class="file-drop__hint">PDF, изображения, DOCX, TXT, ZIP</div>
+        </div>
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-upload">
+      ⬆️ Загрузить
+    </button>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Подставляем date из URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('date') && !document.getElementById('date').value)
+    document.getElementById('date').value = params.get('date');
+  // Предмет из URL — выбираем в select если есть совпадение
+  const subjectParam = params.get('subject');
+  if (subjectParam) {
+    const sel = document.getElementById('subject_name');
+    if (sel) {
+      const decoded = decodeURIComponent(subjectParam);
+      for (let opt of sel.options) {
+        if (opt.value === decoded) { sel.value = decoded; break; }
+      }
+    }
+  }
+
+  // Запоминаем имя автора
+  const authorInput = document.getElementById('author_name');
+  const saved = localStorage.getItem('conspect_author');
+  if (saved && !authorInput.value) authorInput.value = saved;
+  authorInput.addEventListener('input', () => localStorage.setItem('conspect_author', authorInput.value));
+
+  // Кастомный выбор файла
+  const fileInput = document.getElementById('file');
+  const dropContent = document.getElementById('file-drop-content');
+  const dropZone = document.getElementById('file-drop');
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) {
+      dropContent.innerHTML = `
+        <div class="file-drop__icon">✅</div>
+        <div class="file-drop__text">${fileInput.files[0].name}</div>
+        <div class="file-drop__hint">${(fileInput.files[0].size / 1024 / 1024).toFixed(2)} МБ</div>
+      `;
+      dropZone.classList.add('has-file');
+    }
+  });
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) {
+      const dt = new DataTransfer();
+      dt.items.add(e.dataTransfer.files[0]);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change'));
+    }
+  });
+</script>
+{% endblock %}

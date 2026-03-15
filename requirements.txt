@@ -9,3 +9,4 @@ aiogram>=3.4
 psycopg2-binary>=2.9
 dj-database-url>=2.1
 aiohttp>=3.9
+requests>=2.31

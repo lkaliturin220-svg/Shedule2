@@ -1,0 +1,93 @@
+{% extends "schedule/base.html" %}
+{% block title %}Модерация конспектов{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>🛡️ Модерация конспектов</h1>
+  <p class="subtitle">Всего загружено: <strong>{{ conspects|length }}</strong></p>
+</div>
+
+{# Фильтры #}
+<form method="get" class="mod-filters">
+  <select name="group" onchange="this.form.submit()">
+    <option value="">Все группы</option>
+    {% for g in all_groups %}
+      <option value="{{ g.name }}" {% if group_filter == g.name %}selected{% endif %}>{{ g.name }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="user" value="{{ user_filter }}" placeholder="Поиск по имени...">
+  <button type="submit" class="btn btn-primary">Найти</button>
+  {% if group_filter or user_filter %}
+    <a href="{% url 'schedule:conspect_moderation' %}" class="btn btn-secondary">Сбросить</a>
+  {% endif %}
+</form>
+
+{% if conspects %}
+  <div class="mod-table-wrap">
+    <table class="mod-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Дата загрузки</th>
+          <th>Предмет / Дата занятия</th>
+          <th>Автор</th>
+          <th>Группа</th>
+          <th>Тип</th>
+          <th>Файл</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in conspects %}
+          <tr>
+            <td class="mod-id">{{ c.pk }}</td>
+            <td class="mod-date">{{ c.uploaded_at|date:"d.m.Y H:i" }}</td>
+            <td>
+              <div class="mod-subject">{{ c.conspect_date.subject.name }}</div>
+              <div class="mod-lesson-date">{{ c.conspect_date.date|date:"d.m.Y" }}</div>
+            </td>
+            <td>
+              <div class="mod-author">{{ c.author_name }}</div>
+              {% if c.author %}
+                <div class="mod-username">@{{ c.author.username }}</div>
+              {% else %}
+                <div class="mod-username mod-anon">аноним</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if c.group %}
+                <span class="group-pill-sm">{{ c.group }}</span>
+              {% else %}
+                <span class="mod-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="file-type-badge type-{{ c.file_type }}">
+                {% if c.file_type == "conspect" %}📝{% elif c.file_type == "hw" %}✏️{% else %}📎{% endif %}
+              </span>
+            </td>
+            <td>
+              <a href="{{ c.file.url }}" target="_blank" class="mod-file-link">
+                <span class="file-ext ext-{{ c.file_ext }}">{{ c.file_ext|upper }}</span>
+                {{ c.filename|truncatechars:20 }}
+              </a>
+            </td>
+            <td>
+              <form method="post" action="{% url 'schedule:conspect_delete' c.pk %}"
+                    onsubmit="return confirm('Удалить конспект от {{ c.author_name }}?')">
+                {% csrf_token %}
+                <button type="submit" class="btn-delete-mod">🗑️ Удалить</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">✅</div>
+    <div class="empty-text">Нет конспектов по выбранным фильтрам</div>
+  </div>
+{% endif %}
+{% endblock %}

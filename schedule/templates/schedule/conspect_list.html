@@ -1,0 +1,61 @@
+{% extends "schedule/base.html" %}
+{% block title %}Конспекты и ДЗ{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>📚 Конспекты и ДЗ</h1>
+  {% if user_group %}
+    <p class="subtitle">Материалы группы <strong>{{ user_group }}</strong></p>
+  {% else %}
+    <p class="subtitle">Все загруженные материалы</p>
+  {% endif %}
+</div>
+
+<div class="conspect-toolbar">
+  {% if user.is_authenticated %}
+    <a href="{% url 'schedule:conspect_upload' %}" class="btn btn-primary">
+      ➕ Загрузить материал
+    </a>
+  {% else %}
+    <a href="{% url 'schedule:student_login' %}?next=/conspects/upload/" class="btn btn-primary">
+      🔑 Войти и загрузить
+    </a>
+    <span class="toolbar-hint">Для загрузки нужен аккаунт</span>
+  {% endif %}
+</div>
+
+{% if subjects %}
+  <div class="subject-grid">
+    {% for subj in subjects %}
+      <a href="{% url 'schedule:conspect_subject' subj.pk %}" class="subject-card">
+        <div class="subject-card__icon">📖</div>
+        <div class="subject-card__body">
+          <div class="subject-card__name">{{ subj.name }}</div>
+          <div class="subject-card__meta">
+            {% with cnt=subj.dates.count %}
+              {{ cnt }} дат{% if cnt == 1 %}а{% elif cnt >= 2 and cnt <= 4 %}ы{% else %}{% endif %}
+            {% endwith %}
+          </div>
+        </div>
+        <div class="subject-card__arrow">›</div>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">📂</div>
+    <div class="empty-text">
+      {% if user_group %}
+        В вашей группе пока нет материалов
+      {% else %}
+        Пока никто ничего не загрузил
+      {% endif %}
+    </div>
+    {% if user.is_authenticated %}
+      <a href="{% url 'schedule:conspect_upload' %}" class="btn btn-primary" style="margin-top:16px">
+        Загрузить первым
+      </a>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

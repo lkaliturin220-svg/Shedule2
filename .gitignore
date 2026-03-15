@@ -1,39 +1,19 @@
-# Python
 __pycache__/
 *.py[cod]
 *.pyo
-*.pyd
-.Python
-*.egg
 *.egg-info/
 dist/
 build/
-.eggs/
-
-# Django
 *.log
+local_settings.py
 db.sqlite3
 staticfiles/
 media/
-
-# Env
 .env
-*.env
-
-# Venv
-venv/
-.venv/
-env/
-
-# IDE
-.idea/
+.env.*
+!.env.example
 .vscode/
+.idea/
 *.swp
-*.swo
 .DS_Store
-
-# Docker
-*.override.yml
-
-# Uploads
-uploads/
+Thumbs.db

@@ -14,6 +14,24 @@ urlpatterns = [
     path("upload/",                       views.upload_schedule,  name="upload"),
     path("delete-date/",                  views.delete_date,      name="delete_date"),
 
+    # Конспекты и ДЗ
+    path("conspects/",                          views.conspect_list,    name="conspect_list"),
+    path("conspects/upload/",                   views.conspect_upload,  name="conspect_upload"),
+    path("conspects/subject/<int:pk>/",         views.conspect_subject, name="conspect_subject"),
+    path("conspects/date/<int:pk>/",            views.conspect_date,    name="conspect_date"),
+
+    # Конспекты — удаление
+    path("conspects/delete/<int:pk>/",           views.conspect_delete,  name="conspect_delete"),
+
+    # Авторизация студентов
+    path("auth/register/",               views.student_register, name="student_register"),
+    path("auth/login/",                  views.student_login,    name="student_login"),
+    path("auth/logout/",                 views.student_logout,   name="student_logout"),
+
+    # Пользовательское соглашение
+    path("terms/",                       views.terms,            name="terms"),
+    path("feedback/",                    views.feedback,         name="feedback"),
+
     # API для Telegram-бота
     path("api/groups/",                         views.api_groups,            name="api_groups"),
     path("api/teachers/",                        views.api_teachers,           name="api_teachers"),

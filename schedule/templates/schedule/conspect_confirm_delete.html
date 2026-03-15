@@ -1,0 +1,31 @@
+{% extends "schedule/base.html" %}
+{% block title %}Удалить конспект{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-icon">🗑️</div>
+      <h1>Удалить конспект?</h1>
+    </div>
+
+    <div class="delete-info">
+      <p><strong>Автор:</strong> {{ conspect.author_name }}</p>
+      <p><strong>Предмет:</strong> {{ conspect.conspect_date.subject.name }}</p>
+      <p><strong>Дата:</strong> {{ conspect.conspect_date.date|date:"d.m.Y" }}</p>
+      <p><strong>Файл:</strong> {{ conspect.filename }}</p>
+    </div>
+
+    <p class="delete-warning">⚠️ Файл будет удалён безвозвратно.</p>
+
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+      <div style="display:flex; gap:12px;">
+        <button type="submit" class="btn btn-danger btn-full">Да, удалить</button>
+        <a href="{% url 'schedule:conspect_date' conspect.conspect_date.pk %}"
+           class="btn btn-secondary btn-full">Отмена</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
