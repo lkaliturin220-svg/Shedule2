@@ -17,3 +17,5 @@ media/
 *.swp
 .DS_Store
 Thumbs.db
+*.zip
+docker-compose.yml.save
