@@ -22,10 +22,8 @@ services:
   tgbot:
     build: .
     command: python manage.py start_tgbot
+    network_mode: host
     env_file: .env
-    depends_on:
-      - web
-      - redis
     restart: always
 
   redis:

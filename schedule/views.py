@@ -52,8 +52,9 @@ def index(request):
 
 @gzip_page
 @cache_page(120)
-def group_schedule(request, name):
-    group = get_object_or_404(Group, name=name)
+def group_schedule(request, slug):
+    # »щем по слагу! get_object_or_404 сам выкинет 404 если слаг неверный
+    group = get_object_or_404(Group, slug=slug)
     qs    = Lesson.objects.filter(group=group).select_related("teacher", "subject")
     dates = _dates_for_qs(qs)
     sel   = _resolve_date(request, dates)
