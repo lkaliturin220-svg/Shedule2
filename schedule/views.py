@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
 from django.db import models as db_models
 from django.http import JsonResponse
@@ -16,7 +16,8 @@ from .parser import parse_xlsx
 # ──────────────────────────── helpers ────────────────────────────────────────
 
 def _clear_cache():
-    cache.clear()
+    # Очищаем только page-cache (префикс "site"), не трогая сессии и API-кэш.
+    cache.delete_pattern("site:*")
 
 
 def _dates_for_qs(qs):
@@ -37,8 +38,6 @@ def _resolve_date(request, dates):
 
 # ──────────────────────────── public: index ──────────────────────────────────
 
-@gzip_page
-@cache_page(120)
 def index(request):
     groups   = Group.objects.all()
     teachers = Teacher.objects.all()
@@ -50,8 +49,6 @@ def index(request):
 
 # ──────────────────────────── public: group ──────────────────────────────────
 
-@gzip_page
-@cache_page(120)
 def group_schedule(request, name):
     group = get_object_or_404(Group, name=name)
     qs    = Lesson.objects.filter(group=group).select_related("teacher", "subject")
@@ -72,8 +69,6 @@ def group_schedule(request, name):
 
 # ──────────────────────────── public: teacher ────────────────────────────────
 
-@gzip_page
-@cache_page(120)
 def teacher_schedule(request, pk):
     teacher = get_object_or_404(Teacher, pk=pk)
     qs      = Lesson.objects.filter(teacher=teacher).select_related("group", "subject")
@@ -94,7 +89,7 @@ def teacher_schedule(request, pk):
 
 # ──────────────────────────── admin panel ───────────────────────────────────
 
-@login_required
+@staff_member_required
 def admin_panel(request):
     stats = {
         "groups":   Group.objects.count(),
@@ -117,45 +112,23 @@ def admin_panel(request):
     })
 
 
-@login_required
+@staff_member_required
 def upload_schedule(request):
     if request.method != "POST" or "xlsx_file" not in request.FILES:
         return redirect("schedule:admin_panel")
 
+    from .services import save_lessons
+
     try:
         result  = parse_xlsx(request.FILES["xlsx_file"])
         lessons = result["lessons"]
-        count   = 0
 
-        for row in lessons:
-            if not row["subject"] or not row["group"]:
-                continue
-
-            # Пропускаем строки без преподавателя — это технические строки
-            teacher_name = row["teacher"] or "Не указан"
-
-            group_obj,   _ = Group.objects.get_or_create(name=row["group"])
-            teacher_obj, _ = Teacher.objects.get_or_create(name=teacher_name)
-            subject_obj, _ = Subject.objects.get_or_create(name=row["subject"])
-
-            Lesson.objects.update_or_create(
-                date=row["date"],
-                pair_number=row["pair_number"],
-                subgroup=row["subgroup"],
-                group=group_obj,
-                teacher=teacher_obj,
-                defaults={
-                    "subject":     subject_obj,
-                    "room":        row["room"],
-                    "day_of_week": row["day_of_week"],
-                },
-            )
-            count += 1
+        processed, _created = save_lessons(lessons, update_existing=True)
 
         _clear_cache()
         messages.success(
             request,
-            f"✅ Загружено {count} занятий | {result['day_of_week']}, {result['date']}"
+            f"✅ Загружено {processed} занятий | {result['day_of_week']}, {result['date']}"
         )
 
     except Exception as exc:
@@ -164,7 +137,7 @@ def upload_schedule(request):
     return redirect("schedule:admin_panel")
 
 
-@login_required
+@staff_member_required
 def delete_date(request):
     if request.method == "POST":
         d = request.POST.get("date")
@@ -177,16 +150,19 @@ def delete_date(request):
 
 # ──────────────────────────── API для Telegram ──────────────────────────────
 
+@cache_page(300)
 def api_groups(request):
     groups = list(Group.objects.values_list("name", flat=True))
     return JsonResponse({"groups": groups})
 
 
+@cache_page(300)
 def api_teachers(request):
     teachers = list(Teacher.objects.values("id", "name"))
     return JsonResponse({"teachers": teachers})
 
 
+@cache_page(300)
 def api_group_schedule(request, name):
     d = request.GET.get("date", str(date.today()))
     lessons = (
@@ -208,6 +184,7 @@ def api_group_schedule(request, name):
     return JsonResponse({"group": name, "date": d, "lessons": data})
 
 
+@cache_page(300)
 def api_teacher_schedule(request, pk):
     d = request.GET.get("date", str(date.today()))
     lessons = (
@@ -424,8 +401,12 @@ def terms(request):
 
 def student_register(request):
     """Регистрация студента по инвайт-коду."""
-    from django.contrib.auth.models import User
     from django.contrib.auth import login as auth_login
+    from django.contrib.auth.models import User
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from django.db import transaction
+    from django.db.models import F
 
     if request.user.is_authenticated:
         return redirect("schedule:conspect_list")
@@ -443,10 +424,13 @@ def student_register(request):
             errors.append("Это имя уже занято, выберите другое.")
         if not password:
             errors.append("Введите пароль.")
-        elif len(password) < 4:
-            errors.append("Пароль должен быть не менее 4 символов.")
-        if password != password2:
+        elif password != password2:
             errors.append("Пароли не совпадают.")
+        else:
+            try:
+                validate_password(password)
+            except ValidationError as e:
+                errors.extend(list(e.messages))
         if not invite_raw:
             errors.append("Введите инвайт-код.")
 
@@ -465,10 +449,18 @@ def student_register(request):
                 messages.error(request, e)
             return render(request, "schedule/student_register.html", {"post": request.POST})
 
-        user = User.objects.create_user(username=username, password=password)
-        StudentProfile.objects.create(user=user, group=invite.group, invite=invite)
-        invite.used += 1
-        invite.save(update_fields=["used"])
+        try:
+            with transaction.atomic():
+                invite = InviteCode.objects.select_for_update().get(pk=invite.pk)
+                if not invite.is_available:
+                    raise InviteCode.DoesNotExist
+
+                user = User.objects.create_user(username=username, password=password)
+                StudentProfile.objects.create(user=user, group=invite.group, invite=invite)
+                InviteCode.objects.filter(pk=invite.pk).update(used=F("used") + 1)
+        except InviteCode.DoesNotExist:
+            messages.error(request, "Инвайт-код исчерпан или деактивирован.")
+            return render(request, "schedule/student_register.html", {"post": request.POST})
 
         auth_login(request, user)
         messages.success(request, f"Добро пожаловать, {username}! Вы зарегистрированы как студент группы {invite.group}.")
@@ -480,6 +472,7 @@ def student_register(request):
 def student_login(request):
     """Вход студента."""
     from django.contrib.auth import authenticate, login as auth_login
+    from django.utils.http import url_has_allowed_host_and_scheme
 
     if request.user.is_authenticated:
         return redirect("schedule:conspect_list")
@@ -490,8 +483,14 @@ def student_login(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             auth_login(request, user)
-            next_url = request.POST.get("next") or request.GET.get("next") or "schedule:conspect_list"
-            return redirect(next_url)
+            next_url = request.POST.get("next") or request.GET.get("next") or ""
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect("schedule:conspect_list")
         else:
             messages.error(request, "Неверное имя пользователя или пароль.")
 
@@ -570,7 +569,8 @@ def conspect_moderation(request):
 
 
 def feedback(request):
-    import os, requests as req
+    import requests as req
+    from django.conf import settings
     from .models import Feedback
 
     if request.method == "POST":
@@ -582,8 +582,8 @@ def feedback(request):
             fb = Feedback.objects.create(category=category, text=text, contact=contact)
 
             # Отправить в Telegram @TIRED_Kiwi
-            token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-            admin_id = os.getenv("ADMIN_CHAT_ID", "")
+            token = settings.TELEGRAM_BOT_TOKEN
+            admin_id = settings.ADMIN_CHAT_ID
             if token and admin_id:
                 cat_labels = {"bug": "🐛 Баг", "idea": "💡 Идея", "other": "📨 Другое"}
                 label = cat_labels.get(category, category)

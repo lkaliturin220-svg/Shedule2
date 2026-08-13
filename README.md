@@ -52,6 +52,8 @@ DATABASE_URL=postgres://user:pass@db:5432/dbname
 REDIS_URL=redis://redis:6379/1
 TELEGRAM_BOT_TOKEN=
 ADMIN_CHAT_ID=
+YADISK_PUBLIC_KEY=      # публичная ссылка Яндекс.Диска с файлами studentam_*.xlsx
+SCHEDULE_SYNC_INTERVAL=900
 ```
 
 ---

@@ -12,7 +12,7 @@ from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -25,23 +25,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from schedule.const import PAIR_TIMES  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
 BASE_URL = os.getenv("SCHEDULE_API_URL", "http://127.0.0.1:8000")
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/1")
 
-bot     = Bot(token=TOKEN)
-storage = MemoryStorage()
+bot     = Bot(token=TOKEN) if TOKEN else None
+storage = RedisStorage.from_url(REDIS_URL)
 dp      = Dispatcher(storage=storage)
 router  = Router()
 dp.include_router(router)
-
-PAIR_TIMES = {
-    1: "08:30–10:00", 2: "10:20–11:50", 3: "12:10–13:40",
-    4: "14:00–15:30", 5: "15:40–17:10", 6: "17:15–18:45",
-    7: "19:00–20:30", 8: "20:00–21:30",
-}
 
 WEEKDAYS_RU = {
     0: "Понедельник", 1: "Вторник", 2: "Среда",
@@ -451,7 +448,7 @@ async def cmd_unsubscribe(message: Message):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main():
-    if not TOKEN:
+    if not TOKEN or bot is None:
         logger.error("TELEGRAM_BOT_TOKEN не задан!")
         return
     _setup_django()

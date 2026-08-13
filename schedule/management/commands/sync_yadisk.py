@@ -1,20 +1,20 @@
 import logging
-import os
 import re
+import time
 from datetime import datetime
 from io import BytesIO
 
 import requests
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from schedule.models import Group, Lesson, Subject, Teacher
 from schedule.parser import parse_xlsx
+from schedule.services import save_lessons
 
 logger = logging.getLogger(__name__)
 
-PUBLIC_KEY = "https://disk.360.yandex.ru/d/g3_4Rr1v5k-WDQ"
-API_BASE   = "https://cloud-api.yandex.net/v1/disk/public/resources"
-SITE_URL   = "https://kemgtt.serverkiwi.ru"
+API_BASE = "https://cloud-api.yandex.net/v1/disk/public/resources"
+SITE_URL = "https://kemgtt.serverkiwi.ru"
 
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
@@ -29,44 +29,19 @@ def _extract_date(filename):
         return None
 
 
-def _get_file_list():
-    resp = requests.get(API_BASE, params={"public_key": PUBLIC_KEY, "limit": 100}, timeout=15)
+def _get_file_list(public_key):
+    resp = requests.get(API_BASE, params={"public_key": public_key, "limit": 100}, timeout=15)
     resp.raise_for_status()
     return resp.json().get("_embedded", {}).get("items", [])
 
 
-def _download_file(filename):
+def _download_file(public_key, filename):
     dl = requests.get(f"{API_BASE}/download",
-                      params={"public_key": PUBLIC_KEY, "path": f"/{filename}"}, timeout=15)
+                      params={"public_key": public_key, "path": f"/{filename}"}, timeout=15)
     dl.raise_for_status()
     f = requests.get(dl.json()["href"], timeout=30)
     f.raise_for_status()
     return f.content
-
-
-def _save_lessons(lessons):
-    created = 0
-    for lesson in lessons:
-        group,   _ = Group.objects.get_or_create(name=lesson["group"])
-        teacher, _ = Teacher.objects.get_or_create(
-            name=" ".join(lesson["teacher"].split()) if lesson["teacher"] else "Ne ukazan"
-        )
-        subject, _ = Subject.objects.get_or_create(name=lesson["subject"])
-        _, is_new = Lesson.objects.get_or_create(
-            date=lesson["date"],
-            pair_number=lesson["pair_number"],
-            subgroup=lesson["subgroup"],
-            group=group,
-            defaults={
-                "day_of_week": lesson["day_of_week"],
-                "teacher":     teacher,
-                "subject":     subject,
-                "room":        lesson["room"],
-            },
-        )
-        if is_new:
-            created += 1
-    return created
 
 
 def _send_tg(token, chat_id, text):
@@ -77,30 +52,27 @@ def _send_tg(token, chat_id, text):
             timeout=10,
         )
     except Exception as e:
-        logger.warning("Telegram send error chat=%s: %s", chat_id, e)
+        logger.warning("Не удалось отправить сообщение chat=%s: %s", chat_id, e)
 
 
 def _notify_subscribers(token, imported_files):
     if not token or not imported_files:
         return
-    try:
-        from schedule.models import Subscription
-    except ImportError:
-        logger.error("Subscription model not found")
-        return
+
+    from schedule.models import Subscription
 
     by_group = {}
-    for group_name, fdate, count in imported_files:
-        by_group[group_name] = (fdate, count)
+    for group_name, fdate, cnt in imported_files:
+        by_group[group_name] = (fdate, cnt)
 
     if not by_group:
         return
 
-    admin_chat_id = os.getenv("ADMIN_CHAT_ID")
+    admin_chat_id = getattr(settings, "ADMIN_CHAT_ID", "") or ""
     if admin_chat_id:
-        lines = ["<b>Novoe raspisanie zagruzheno</b>\n"]
+        lines = ["<b>Загружено новое расписание</b>\n"]
         for gname, (fdate, cnt) in by_group.items():
-            lines.append(f"{gname} -- {fdate.strftime('%d.%m.%Y')} ({cnt} zanyatiy)")
+            lines.append(f"{gname} — {fdate.strftime('%d.%m.%Y')} ({cnt} занятий)")
         lines.append(f"\n{SITE_URL}")
         _send_tg(token, admin_chat_id, "\n".join(lines))
 
@@ -112,84 +84,121 @@ def _notify_subscribers(token, imported_files):
     for sub in subs:
         chat_groups.setdefault(sub.chat_id, []).append(sub.group.name)
 
-    logger.info("Rassylka: %d podpischikov", len(chat_groups))
+    logger.info("Рассылка уведомлений: %d подписчиков", len(chat_groups))
 
     for chat_id, groups in chat_groups.items():
-        lines = ["<b>Poyavilos novoe raspisanie!</b>\n"]
+        lines = ["<b>Появилось новое расписание!</b>\n"]
         for gname in groups:
-            fdate, cnt = by_group[gname]
-            lines.append(f"<b>{gname}</b> -- {fdate.strftime('%d.%m.%Y')}")
-        lines.append(f"\n<a href='{SITE_URL}'>Otkryt raspisanie</a>")
+            fdate, _cnt = by_group[gname]
+            lines.append(f"<b>{gname}</b> — {fdate.strftime('%d.%m.%Y')}")
+        lines.append(f"\n<a href='{SITE_URL}'>Открыть расписание</a>")
         _send_tg(token, chat_id, "\n".join(lines))
 
 
-class Command(BaseCommand):
-    help = "Skachat novye fayly raspisaniya s Yandex.Diska"
+def sync_once(stdout, stderr):
+    from schedule.models import Lesson
 
-    def handle(self, *args, **kwargs):
-        self.stdout.write("=== sync_yadisk ===")
-        token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    public_key = getattr(settings, "YADISK_PUBLIC_KEY", "") or ""
+    if not public_key:
+        stderr.write("Не задан YADISK_PUBLIC_KEY в .env!")
+        return
+
+    token = getattr(settings, "TELEGRAM_BOT_TOKEN", "") or ""
+
+    try:
+        items = _get_file_list(public_key)
+    except Exception as e:
+        stderr.write(f"[ОШИБКА] Не удалось получить список файлов: {e}")
+        return
+
+    xlsx_files = [
+        item for item in items
+        if item.get("name", "").startswith("studentam_")
+        and item.get("name", "").endswith(".xlsx")
+    ]
+
+    if not xlsx_files:
+        stdout.write("Файлов не найдено.")
+        return
+
+    stdout.write(f"Найдено файлов: {len(xlsx_files)}")
+    imported = []
+
+    for item in xlsx_files:
+        name = item["name"]
+        file_date = _extract_date(name)
+
+        if not file_date:
+            stdout.write(f"  {name} — не удалось извлечь дату, пропускаю")
+            continue
+
+        if Lesson.objects.filter(date=file_date).exists():
+            stdout.write(f"  {name} — уже в базе ({file_date}), пропускаю")
+            continue
 
         try:
-            items = _get_file_list()
+            content = _download_file(public_key, name)
+            stdout.write(f"  {name} — скачан ({len(content)//1024} КБ)")
         except Exception as e:
-            self.stderr.write(f"[OSHIBKA] {e}")
+            stderr.write(f"  {name} — [ОШИБКА скачивания] {e}")
+            continue
+
+        try:
+            data    = parse_xlsx(BytesIO(content))
+            lessons = data["lessons"]
+            stdout.write(f"  {name} — {len(lessons)} занятий")
+        except Exception as e:
+            stderr.write(f"  {name} — [ОШИБКА парсинга] {e}")
+            continue
+
+        try:
+            processed, created = save_lessons(lessons, update_existing=False)
+            stdout.write(f"  {name} — сохранено {processed}, новых {created}")
+            groups_in_file = set(l["group"] for l in lessons)
+            for gname in groups_in_file:
+                cnt = sum(1 for l in lessons if l["group"] == gname)
+                imported.append((gname, file_date, cnt))
+        except Exception as e:
+            stderr.write(f"  {name} — [ОШИБКА сохранения] {e}")
+            continue
+
+    if imported:
+        _notify_subscribers(token, imported)
+        stdout.write("Уведомления отправлены.")
+
+    total = sum(c for _, _, c in imported)
+    stdout.write(f"=== Готово. Добавлено: {total} ===")
+
+
+class Command(BaseCommand):
+    help = "Скачать новые файлы расписания с Яндекс.Диска"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--watch",
+            action="store_true",
+            help="Запускать синхронизацию в цикле с заданным интервалом",
+        )
+        parser.add_argument(
+            "--interval",
+            type=int,
+            default=None,
+            help="Интервал синхронизации в секундах (по умолчанию — SCHEDULE_SYNC_INTERVAL из .env, 900 с)",
+        )
+
+    def handle(self, *args, **kwargs):
+        interval = kwargs.get("interval") or getattr(settings, "SCHEDULE_SYNC_INTERVAL", 900)
+        watch = kwargs.get("watch")
+
+        if not watch:
+            sync_once(self.stdout, self.stderr)
             return
 
-        xlsx_files = [
-            item for item in items
-            if item.get("name", "").startswith("studentam_")
-            and item.get("name", "").endswith(".xlsx")
-        ]
-
-        if not xlsx_files:
-            self.stdout.write("Faylov ne naydeno.")
-            return
-
-        self.stdout.write(f"Naydeno faylov: {len(xlsx_files)}")
-        imported = []
-
-        for item in xlsx_files:
-            name = item["name"]
-            file_date = _extract_date(name)
-
-            if not file_date:
-                self.stdout.write(f"  {name} -- ne udalos izvlech datu, propuskayu")
-                continue
-
-            if Lesson.objects.filter(date=file_date).exists():
-                self.stdout.write(f"  {name} -- uzhe v baze ({file_date}), propuskayu")
-                continue
-
+        self.stdout.write(f"Запуск синхронизации в цикле, интервал {interval} с")
+        while True:
             try:
-                content = _download_file(name)
-                self.stdout.write(f"  {name} -- skachan ({len(content)//1024} KB)")
+                sync_once(self.stdout, self.stderr)
             except Exception as e:
-                self.stderr.write(f"  {name} -- [OSHIBKA skachivaniay] {e}")
-                continue
-
-            try:
-                data    = parse_xlsx(BytesIO(content))
-                lessons = data["lessons"]
-                self.stdout.write(f"  {name} -- {len(lessons)} zanyatiy")
-            except Exception as e:
-                self.stderr.write(f"  {name} -- [OSHIBKA parsinga] {e}")
-                continue
-
-            try:
-                created = _save_lessons(lessons)
-                self.stdout.write(f"  {name} -- sokhraneno {created} novykh")
-                groups_in_file = set(l["group"] for l in lessons)
-                for gname in groups_in_file:
-                    cnt = sum(1 for l in lessons if l["group"] == gname)
-                    imported.append((gname, file_date, cnt))
-            except Exception as e:
-                self.stderr.write(f"  {name} -- [OSHIBKA sokhraneniya] {e}")
-                continue
-
-        if imported:
-            _notify_subscribers(token, imported)
-            self.stdout.write("Uvedomleniya otpravleny.")
-
-        total = sum(c for _, _, c in imported)
-        self.stdout.write(f"=== Gotovo. Dobavleno: {total} ===")
+                self.stderr.write(f"[ОШИБКА] {e}")
+            self.stdout.write(f"Следующая проверка через {interval} с…")
+            time.sleep(interval)

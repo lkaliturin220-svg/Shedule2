@@ -119,8 +119,12 @@ class ConspectDate(models.Model):
 
 def conspect_upload_path(instance, filename):
     import os
+    import re
     ext = os.path.splitext(filename)[1].lower()
-    return f"conspects/{instance.conspect_date.subject_id}/{instance.conspect_date.date}/{instance.author_name}{ext}"
+    safe_author = re.sub(r"[^\w\s-]", "_", instance.author_name)
+    safe_author = re.sub(r"\s+", " ", safe_author).strip(" _-")
+    safe_author = safe_author[:60] or "author"
+    return f"conspects/{instance.conspect_date.subject_id}/{instance.conspect_date.date}/{safe_author}{ext}"
 
 
 class Conspect(models.Model):
