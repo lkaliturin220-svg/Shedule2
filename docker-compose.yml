@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   web:
     build: .
@@ -19,11 +17,20 @@ services:
     ports:
       - "8000:8000"   # убери если используешь NPMplus/Nginx proxy
 
+  xray:
+    image: teddysun/xray:latest
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+    network_mode: host
+    restart: always
+
   tgbot:
     build: .
     command: python manage.py start_tgbot
     network_mode: host
     env_file: .env
+    environment:
+      - PROXY_URL=socks5://127.0.0.1:1080
     restart: always
 
   redis:
@@ -52,3 +59,4 @@ volumes:
   static_data:
   redis_data:
   pg_data:
+
