@@ -61,11 +61,12 @@ a:hover { text-decoration: underline; }
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 100;
-  height: 56px;
+  min-height: 56px;
 }
 .navbar .container {
   display: flex; align-items: center; justify-content: space-between;
-  height: 55px; gap: 12px;
+  min-height: 55px; gap: 10px 12px; flex-wrap: wrap;
+  padding-top: 4px; padding-bottom: 4px;
 }
 .logo {
   font-weight: 700; font-size: 1.02rem; color: var(--ink) !important;
@@ -605,11 +606,17 @@ button.btn-submit:hover, .btn-submit:hover {
 }
 .terms-date { color: var(--muted); font-size: .84rem; font-weight: 600; }
 
+/* ── Планшет/узкий десктоп: шапка в два ряда ───────────── */
+@media (max-width: 1150px) {
+  .navbar .container { padding-top: 8px; padding-bottom: 8px; }
+  .logo { margin-right: auto; }
+  .theme-switch { order: 2; }
+  .nav-links { order: 3; width: 100%; }
+}
+
 /* ── Mobile ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .container { padding: 0 14px; }
-  .navbar { height: auto; }
-  .navbar .container { height: auto; flex-wrap: wrap; padding: 10px 14px; }
   td, th { padding: 9px 11px; font-size: .84rem; }
   .group-grid, .entity-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
   .subject-grid, .files-grid { grid-template-columns: 1fr; }
