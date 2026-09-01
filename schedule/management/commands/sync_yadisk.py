@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 
 import requests
+from django.core.cache import cache
 from django.core.management.base import BaseCommand
 
 from schedule.models import Group, Lesson, Subject, Teacher
@@ -188,6 +189,7 @@ class Command(BaseCommand):
                 continue
 
         if imported:
+            cache.clear()  # сбросить кэш страниц сайта
             _notify_subscribers(token, imported)
             self.stdout.write("Uvedomleniya otpravleny.")
 
