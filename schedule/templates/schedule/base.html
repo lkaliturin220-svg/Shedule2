@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Расписание занятий колледжа">
   <title>{% block title %}Расписание{% endblock %}</title>
+  <meta property="og:site_name" content="Расписание КГТТ">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% block og_title %}Расписание КГТТ{% endblock %}">
+  <meta property="og:description" content="{% block og_desc %}Расписание занятий, конспекты и ДЗ для групп и преподавателей КГТТ. Неофициальный студенческий сервис.{% endblock %}">
+  <meta property="og:image" content="{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-cover.png' %}">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
@@ -21,7 +27,7 @@
     })();
   </script>
 </head>
-<body>
+<body data-default-group="{{ user.student_profile.group.name|default:'' }}" data-url-group="{% url 'schedule:group' '__NAME__' %}">
 
 <nav class="navbar">
   <div class="container">
@@ -31,6 +37,7 @@
     </a>
     <div class="nav-links">
       <a href="{% url 'schedule:index' %}" class="{% if request.resolver_match.url_name == 'index' %}active{% endif %}">Главная</a>
+      <a id="fav-group-link" class="fav-chip" href="#" hidden title="Моя группа">⭐ <span></span></a>
       <a href="{% url 'schedule:conspect_list' %}" class="{% if 'conspect' in request.resolver_match.url_name %}active{% endif %}">📚 Конспекты</a>
       <a href="{% url 'schedule:feedback' %}" class="{% if request.resolver_match.url_name == 'feedback' %}active{% endif %}">💬 Обратная связь</a>
       {% if user.is_authenticated %}
@@ -80,5 +87,9 @@
 </footer>
 
 {% block extra_js %}{% endblock %}
+<script>
+  window.scheduleUrls = { group: document.body.dataset.urlGroup };
+</script>
+<script src="{% static 'js/favorites.js' %}" defer></script>
 </body>
 </html>

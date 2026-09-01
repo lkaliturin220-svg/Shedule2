@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="home-hero">
-  <h1>Расписание <span class="hl">занятий</span></h1>
+  <h1>Расписание <em>занятий</em></h1>
   <p>Выберите группу или преподавателя — расписание синхронизируется с техникумом автоматически.</p>
 </div>
 
@@ -19,7 +19,7 @@
     {% if groups %}
       <div class="entity-grid" id="gg">
         {% for g in groups %}
-          <a href="{% url 'schedule:group' g.name %}">{{ g.name }}</a>
+          <a href="{% url 'schedule:group' g.name %}" data-name="{{ g.name }}">{{ g.name }}</a>
         {% endfor %}
       </div>
     {% else %}
@@ -41,7 +41,7 @@
     {% if teachers %}
       <div class="entity-grid" id="tg">
         {% for t in teachers %}
-          <a href="{% url 'schedule:teacher' t.id %}">{{ t.name }}</a>
+          <a href="{% url 'schedule:teacher' t.id %}" data-id="{{ t.id }}">{{ t.name }}</a>
         {% endfor %}
       </div>
     {% else %}

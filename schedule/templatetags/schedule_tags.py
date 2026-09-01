@@ -3,19 +3,32 @@ from django import template
 register = template.Library()
 
 
+PAIR_TIMES = {
+    1: ("08:30", "10:00"),
+    2: ("10:20", "11:50"),
+    3: ("12:10", "13:40"),
+    4: ("14:00", "15:30"),
+    5: ("15:40", "17:10"),
+    6: ("17:15", "18:45"),
+    7: ("18:50", "20:20"),
+    8: ("20:25", "21:55"),
+}
+
+
 @register.filter
 def pair_time(pair_number):
-    times = {
-        1: "08:30–10:00",
-        2: "10:20–11:50",
-        3: "12:10–13:40",
-        4: "14:00–15:30",
-        5: "15:40–17:10",
-        6: "17:15–18:45",
-        7: "18:50–20:20",
-        8: "20:25–21:55",
-    }
-    return times.get(pair_number, "")
+    s, e = PAIR_TIMES.get(pair_number, ("", ""))
+    return f"{s}–{e}" if s else ""
+
+
+@register.filter
+def pair_start(pair_number):
+    return PAIR_TIMES.get(pair_number, ("", ""))[0]
+
+
+@register.filter
+def pair_end(pair_number):
+    return PAIR_TIMES.get(pair_number, ("", ""))[1]
 
 
 @register.filter

@@ -26,13 +26,17 @@ def _dates_for_qs(qs):
 
 
 def _resolve_date(request, dates):
+    """Дата из ?date=; иначе — сегодня (если есть занятия); иначе последняя."""
     selected = request.GET.get("date")
     if selected:
         try:
             return datetime.strptime(selected, "%Y-%m-%d").date()
         except ValueError:
             pass
-    return dates[0] if dates else date.today()
+    today = date.today()
+    if today in dates:
+        return today
+    return dates[0] if dates else today
 
 
 # ──────────────────────────── public: index ──────────────────────────────────
@@ -67,6 +71,7 @@ def group_schedule(request, name):
         "dates":         dates,
         "selected_date": sel,
         "lessons":       lessons,
+        "today":         date.today(),
     })
 
 
@@ -89,6 +94,7 @@ def teacher_schedule(request, pk):
         "dates":         dates,
         "selected_date": sel,
         "lessons":       lessons,
+        "today":         date.today(),
     })
 
 

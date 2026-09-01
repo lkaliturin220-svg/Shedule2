@@ -2,10 +2,13 @@ import logging
 import os
 import re
 from datetime import datetime
+from html import escape
 from io import BytesIO
 
 import requests
+from django.core.cache import cache
 from django.core.management.base import BaseCommand
+from django.db import transaction
 
 from schedule.models import Group, Lesson, Subject, Teacher
 from schedule.parser import parse_xlsx
@@ -21,12 +24,12 @@ DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
 def _extract_date(filename):
     m = DATE_RE.search(filename)
-    if not m:
-        return None
-    try:
-        return datetime.strptime(m.group(1), "%Y-%m-%d").date()
-    except ValueError:
-        return None
+    if m:
+        try:
+            return datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return None
 
 
 def _get_file_list():
@@ -37,36 +40,67 @@ def _get_file_list():
 
 def _download_file(filename):
     dl = requests.get(f"{API_BASE}/download",
-                      params={"public_key": PUBLIC_KEY, "path": f"/{filename}"}, timeout=15)
+                      params={"public_key": PUBLIC_KEY, "path": filename}, timeout=15)
     dl.raise_for_status()
     f = requests.get(dl.json()["href"], timeout=30)
     f.raise_for_status()
     return f.content
 
 
-def _save_lessons(lessons):
-    created = 0
-    for lesson in lessons:
-        group,   _ = Group.objects.get_or_create(name=lesson["group"])
+def _fmt(key, data):
+    """Строка описания занятия: группа · N-я пара пгX: предмет, каб. Y (преподаватель)."""
+    group, pair, sub = key
+    subject, teacher, room = data
+    sub_s = f" пг{sub}" if sub else ""
+    return f"{pair}-я пара{sub_s}: {subject}, каб. {room or '—'} ({teacher})"
+
+
+def _replace_date_lessons(file_date, lessons):
+    """Полностью заменяет занятия даты данными из файла (файл — источник истины).
+
+    Возвращает (existed, count, diff), где diff — отсортированный список
+    (group_name, [строки изменений]) по группам с изменениями.
+    """
+    old_rows = {
+        (l.group.name, l.pair_number, l.subgroup): (l.subject.name, l.teacher.name, l.room)
+        for l in Lesson.objects.filter(date=file_date).select_related("group", "subject", "teacher")
+    }
+
+    new_rows = {}
+    objs = []
+    for row in lessons:
+        if not row["subject"] or not row["group"]:
+            continue
+        group, _ = Group.objects.get_or_create(name=row["group"])
         teacher, _ = Teacher.objects.get_or_create(
-            name=" ".join(lesson["teacher"].split()) if lesson["teacher"] else "Ne ukazan"
+            name=" ".join(row["teacher"].split()) if row["teacher"] else "Не указан"
         )
-        subject, _ = Subject.objects.get_or_create(name=lesson["subject"])
-        _, is_new = Lesson.objects.get_or_create(
-            date=lesson["date"],
-            pair_number=lesson["pair_number"],
-            subgroup=lesson["subgroup"],
-            group=group,
-            defaults={
-                "day_of_week": lesson["day_of_week"],
-                "teacher":     teacher,
-                "subject":     subject,
-                "room":        lesson["room"],
-            },
-        )
-        if is_new:
-            created += 1
-    return created
+        subject, _ = Subject.objects.get_or_create(name=row["subject"])
+        key = (group.name, row["pair_number"], row["subgroup"])
+        new_rows[key] = (subject.name, teacher.name, row["room"])
+        objs.append(Lesson(
+            date=file_date, day_of_week=row["day_of_week"],
+            pair_number=row["pair_number"], subgroup=row["subgroup"],
+            group=group, teacher=teacher, subject=subject, room=row["room"],
+        ))
+
+    with transaction.atomic():
+        Lesson.objects.filter(date=file_date).delete()
+        Lesson.objects.bulk_create(objs)
+
+    lines_by_group = {}
+    for key in sorted(new_rows):
+        if key not in old_rows:
+            lines_by_group.setdefault(key[0], []).append("+ " + _fmt(key, new_rows[key]))
+    for key in sorted(old_rows):
+        if key not in new_rows:
+            lines_by_group.setdefault(key[0], []).append("− " + _fmt(key, old_rows[key]))
+    for key in sorted(new_rows):
+        if key in old_rows and new_rows[key] != old_rows[key]:
+            lines_by_group.setdefault(key[0], []).append("~ " + _fmt(key, new_rows[key]))
+
+    existed = bool(old_rows)
+    return existed, len(objs), sorted(lines_by_group.items())
 
 
 def _send_tg(token, chat_id, text):
@@ -81,6 +115,7 @@ def _send_tg(token, chat_id, text):
 
 
 def _notify_subscribers(token, imported_files):
+    """Рассылка «появилось новое расписание» по группам из новых дат."""
     if not token or not imported_files:
         return
     try:
@@ -92,16 +127,15 @@ def _notify_subscribers(token, imported_files):
     by_group = {}
     for group_name, fdate, count in imported_files:
         by_group[group_name] = (fdate, count)
-
     if not by_group:
         return
 
     admin_chat_id = os.getenv("ADMIN_CHAT_ID")
     if admin_chat_id:
-        lines = ["<b>Novoe raspisanie zagruzheno</b>\n"]
+        lines = ["<b>Новое расписание загружено</b>\n"]
         for gname, (fdate, cnt) in by_group.items():
-            lines.append(f"{gname} -- {fdate.strftime('%d.%m.%Y')} ({cnt} zanyatiy)")
-        lines.append(f"\n{SITE_URL}")
+            lines.append(f"{escape(gname)} — {fdate.strftime('%d.%m.%Y')} ({cnt} занятий)")
+        lines.append(f"\n<a href='{SITE_URL}'>Открыть расписание</a>")
         _send_tg(token, admin_chat_id, "\n".join(lines))
 
     subs = Subscription.objects.filter(
@@ -112,19 +146,66 @@ def _notify_subscribers(token, imported_files):
     for sub in subs:
         chat_groups.setdefault(sub.chat_id, []).append(sub.group.name)
 
-    logger.info("Rassylka: %d podpischikov", len(chat_groups))
+    logger.info("Рассылка (новые даты): %d подписчиков", len(chat_groups))
 
     for chat_id, groups in chat_groups.items():
-        lines = ["<b>Poyavilos novoe raspisanie!</b>\n"]
+        lines = ["<b>Появилось новое расписание!</b>\n"]
         for gname in groups:
-            fdate, cnt = by_group[gname]
-            lines.append(f"<b>{gname}</b> -- {fdate.strftime('%d.%m.%Y')}")
-        lines.append(f"\n<a href='{SITE_URL}'>Otkryt raspisanie</a>")
+            fdate, _cnt = by_group[gname]
+            lines.append(f"<b>{escape(gname)}</b> — {fdate.strftime('%d.%m.%Y')}")
+        lines.append(f"\n<a href='{SITE_URL}'>Открыть расписание</a>")
         _send_tg(token, chat_id, "\n".join(lines))
 
 
+def _notify_changes(token, changes_by_date):
+    """Рассылка об изменениях существующего расписания.
+
+    changes_by_date: {date: [(group_name, [строки изменений])]}
+    """
+    if not token or not changes_by_date:
+        return
+    try:
+        from schedule.models import Subscription
+    except ImportError:
+        logger.error("Subscription model not found")
+        return
+
+    affected = sorted({g for pairs in changes_by_date.values() for g, _ in pairs})
+    subs = Subscription.objects.filter(group__name__in=affected).select_related("group")
+    chat_groups = {}
+    for sub in subs:
+        chat_groups.setdefault(sub.chat_id, set()).add(sub.group.name)
+
+    logger.info("Рассылка (изменения): %d подписчиков", len(chat_groups))
+
+    for date, pairs in sorted(changes_by_date.items()):
+        ds = date.strftime("%d.%m.%Y")
+        for chat_id, groups in chat_groups.items():
+            lines = [f"<b>⚠️ Расписание на {ds} изменилось</b>"]
+            sent = 0
+            for gname, glines in sorted(pairs):
+                if gname not in groups:
+                    continue
+                lines.append(f"\n<b>{escape(gname)}</b>")
+                lines.extend("• " + escape(l) for l in glines[:8])
+                if len(glines) > 8:
+                    lines.append(f"… и ещё {len(glines) - 8} изм.")
+                sent += len(glines)
+            if not sent:
+                continue
+            lines.append(f"\n<a href='{SITE_URL}'>Открыть расписание</a>")
+            _send_tg(token, chat_id, "\n".join(lines))
+
+    admin_chat_id = os.getenv("ADMIN_CHAT_ID")
+    if admin_chat_id:
+        total = sum(len(gl) for pairs in changes_by_date.values() for _, gl in pairs)
+        ds_list = ", ".join(d.strftime("%d.%m") for d in sorted(changes_by_date))
+        _send_tg(token, admin_chat_id,
+                 f"<b>Обновление расписания</b> — {total} изм. ({ds_list})\n{SITE_URL}")
+
+
 class Command(BaseCommand):
-    help = "Skachat novye fayly raspisaniya s Yandex.Diska"
+    help = "Синхронизация расписания с Яндекс.Диском: новые даты и изменения"
 
     def handle(self, *args, **kwargs):
         self.stdout.write("=== sync_yadisk ===")
@@ -133,7 +214,7 @@ class Command(BaseCommand):
         try:
             items = _get_file_list()
         except Exception as e:
-            self.stderr.write(f"[OSHIBKA] {e}")
+            self.stderr.write(f"[ОШИБКА] {e}")
             return
 
         xlsx_files = [
@@ -143,53 +224,63 @@ class Command(BaseCommand):
         ]
 
         if not xlsx_files:
-            self.stdout.write("Faylov ne naydeno.")
+            self.stdout.write("Файлов не найдено.")
             return
 
-        self.stdout.write(f"Naydeno faylov: {len(xlsx_files)}")
-        imported = []
+        self.stdout.write(f"Найдено файлов: {len(xlsx_files)}")
+        imported = []          # (group, date, count) — новые даты
+        changes_by_date = {}   # {date: [(group, [diff-строки])]} — изменения
 
         for item in xlsx_files:
             name = item["name"]
             file_date = _extract_date(name)
 
             if not file_date:
-                self.stdout.write(f"  {name} -- ne udalos izvlech datu, propuskayu")
-                continue
-
-            if Lesson.objects.filter(date=file_date).exists():
-                self.stdout.write(f"  {name} -- uzhe v baze ({file_date}), propuskayu")
+                self.stdout.write(f"  {name} — не удалось извлечь дату, пропускаю")
                 continue
 
             try:
                 content = _download_file(name)
-                self.stdout.write(f"  {name} -- skachan ({len(content)//1024} KB)")
+                self.stdout.write(f"  {name} — скачан ({len(content)//1024} KB)")
             except Exception as e:
-                self.stderr.write(f"  {name} -- [OSHIBKA skachivaniay] {e}")
+                self.stderr.write(f"  {name} — [ОШИБКА скачивания] {e}")
                 continue
 
             try:
-                data    = parse_xlsx(BytesIO(content))
+                data = parse_xlsx(BytesIO(content))
                 lessons = data["lessons"]
-                self.stdout.write(f"  {name} -- {len(lessons)} zanyatiy")
             except Exception as e:
-                self.stderr.write(f"  {name} -- [OSHIBKA parsinga] {e}")
+                self.stderr.write(f"  {name} — [ОШИБКА парсинга] {e}")
                 continue
 
             try:
-                created = _save_lessons(lessons)
-                self.stdout.write(f"  {name} -- sokhraneno {created} novykh")
-                groups_in_file = set(l["group"] for l in lessons)
+                existed, count, diff = _replace_date_lessons(file_date, lessons)
+            except Exception as e:
+                self.stderr.write(f"  {name} — [ОШИБКА сохранения] {e}")
+                continue
+
+            if not existed:
+                self.stdout.write(f"  {name} — новая дата {file_date}: {count} занятий")
+                groups_in_file = set(l["group"] for l in lessons if l["group"])
                 for gname in groups_in_file:
                     cnt = sum(1 for l in lessons if l["group"] == gname)
                     imported.append((gname, file_date, cnt))
-            except Exception as e:
-                self.stderr.write(f"  {name} -- [OSHIBKA sokhraneniya] {e}")
-                continue
+            elif diff:
+                n_changes = sum(len(gl) for _, gl in diff)
+                self.stdout.write(f"  {name} — изменения на {file_date}: {n_changes}")
+                changes_by_date[file_date] = diff
+            else:
+                self.stdout.write(f"  {name} — без изменений ({file_date})")
 
         if imported:
+            cache.clear()
             _notify_subscribers(token, imported)
-            self.stdout.write("Uvedomleniya otpravleny.")
+            self.stdout.write("Уведомления о новых датах отправлены.")
+
+        if changes_by_date:
+            cache.clear()
+            _notify_changes(token, changes_by_date)
+            self.stdout.write("Уведомления об изменениях отправлены.")
 
         total = sum(c for _, _, c in imported)
-        self.stdout.write(f"=== Gotovo. Dobavleno: {total} ===")
+        self.stdout.write(f"=== Готово. Новых занятий: {total} ===")

@@ -607,6 +607,59 @@ button.btn-submit:hover, .btn-submit:hover {
 }
 .terms-date { color: var(--muted); font-size: .84rem; font-weight: 600; }
 
+/* ── Избранное («моя группа») ───────────────────────────── */
+.fav-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--teal) !important; font-weight: 700; font-size: .84rem;
+  background: var(--teal-soft); border-radius: 99px; padding: 5px 13px;
+  max-width: 220px;
+}
+.fav-chip[hidden] { display: none; }
+.fav-chip:hover { text-decoration: none; filter: brightness(.97); }
+.entity-grid a.fav, .group-grid a.fav { border-color: var(--teal); }
+.tile-star { color: var(--teal); margin-right: 6px; font-size: .85rem; }
+.entity-grid a .tile-star { display: inline; }
+.btn-fav { margin-top: 10px; font-size: .82rem; padding: 7px 14px; }
+.btn-fav.is-fav { background: var(--teal-soft); color: var(--teal-h); border-color: var(--teal); }
+
+/* ── Живая подсветка пар ────────────────────────────────── */
+.tl-head-actions { display: inline-flex; align-items: center; gap: 10px; }
+.btn-print {
+  background: var(--card); border: 1px solid var(--line-dark);
+  border-radius: 9px; padding: 4px 9px; cursor: pointer; font-size: .9rem;
+  transition: border-color .15s;
+}
+.btn-print:hover { border-color: var(--teal); }
+.tl-note {
+  display: block; font-size: .76rem; font-weight: 700;
+  color: var(--teal-h); margin-bottom: 3px;
+}
+.tl-next .tl-note { color: var(--muted); }
+.tl-done { opacity: .55; }
+.tl-row.tl-now { background: color-mix(in srgb, var(--teal) 8%, var(--card)); }
+.tl-row.tl-now .tl-rail i {
+  width: 13px; height: 13px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--teal) 25%, transparent);
+}
+.tl-progress {
+  height: 6px; border-radius: 99px; background: var(--line);
+  margin-top: 8px; max-width: 260px; overflow: hidden;
+}
+.tl-progress i { display: block; height: 100%; background: var(--teal); border-radius: 99px; }
+
+/* ── Печать ─────────────────────────────────────────────── */
+@media print {
+  .navbar, .footer, .theme-switch, .btn, .btn-print, .btn-fav,
+  .datebar, .date-form, .breadcrumb, .messages, .conspect-toolbar,
+  .mod-filters, .search-box, .fav-chip, .extra_js, .tl-note, .tl-progress { display: none !important; }
+  body { background: #fff; color: #000; }
+  main { padding: 0; }
+  .card, .tl-card, .tl-head { border: none; box-shadow: none; }
+  .tl-card { border: 1px solid #ccc; }
+  .tl-row { break-inside: avoid; }
+  .tl-row.tl-done { opacity: 1; }
+  a { color: #000; text-decoration: none; }
+}
+
 /* ── Планшет/узкий десктоп: шапка в два ряда ───────────── */
 @media (max-width: 1150px) {
   .navbar .container { padding-top: 8px; padding-bottom: 8px; }
