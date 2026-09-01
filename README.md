@@ -3,56 +3,113 @@
 Неофициальный студенческий сайт расписания Кемеровского горнотехнического техникума.
 
 🌐 **Сайт:** https://kemgtt.serverkiwi.ru  
-👤 **Автор:** [@TIRED_Kiwi](https://t.me/TIRED_Kiwi)  
-🤖 **Бот:** [@tiredkiwi_bot](https://t.me/tiredkiwi_bot)
+🤖 **Бот:** [@tiredkiwi_bot](https://t.me/tiredkiwi_bot)  
+👤 **Автор:** [@TIRED_Kiwi](https://t.me/TIRED_Kiwi)
 
 ---
 
 ## Возможности
 
-- 📆 Расписание занятий по группам и преподавателям
-- 📚 Конспекты и ДЗ — загрузка и просмотр по группам
+**Расписание**
+- 📆 Расписание по группам и преподавателям с ЧПУ (`/group/1ИСиП-23-9/`, `/teacher/12-иванова-м-р/`)
+- ⚡ AJAX-переключение дат без перезагрузки — скелетон-загрузка, история браузера работает
+- 🟢 Живая подсветка пар: «идёт сейчас», «скоро», пройденные (обновляется каждые 30 секунд)
+- 📅 Лента дат: «Сегодня» + последние дни проведения занятий
+- 🖨️ Версия для печати
+- 🔗 QR-код страницы группы для быстрого открытия с телефона
+
+**Контент и пользователи**
+- 📚 Конспекты и ДЗ — загрузка и просмотр по группам и предметам
 - 🔐 Авторизация студентов по инвайт-коду
-- 🔔 Telegram-уведомления об изменениях в расписании
-- 💬 Обратная связь — баги и предложения
 - 🛡️ Модерация конспектов для администратора
+- 💬 Обратная связь — баги и предложения прямо в Telegram админу
+
+**Админка и автоматизация**
+- 📊 Панель администратора: статистика, топ просматриваемых групп и преподавателей (безликие счётчики — без IP и куки)
+- 📥 Загрузка расписания из XLSX (парсер понимает блочный формат техникума, подгруппы, «сам.изуч.»)
+- ☁️ `sync_yadisk` — подтягивает xlsx-файлы расписания из публичной папки Яндекс.Диска и рассылает уведомления подписчикам бота
+- 🗺️ `sitemap.xml` и `robots.txt` генерируются автоматически
 
 ## Стек
 
 | Компонент | Технология |
 |-----------|-----------|
-| Backend | Django 4.2 |
+| Backend | Django 4.2 (gunicorn + gthread, whitenoise, gzip) |
 | База данных | PostgreSQL 16 |
-| Кеш | Redis 7 |
-| Сервер | Gunicorn + Nginx |
-| Бот | aiogram 3 |
+| Кеш и сессии | Redis 7 (страницы кешируются 120 с) |
+| Фронтенд | Ванильный JS + CSS, без сборки и фреймворков |
+| Бот | aiogram 3 (long polling через SOCKS5-прокси) |
+| Прокси для бота | Xray (socks5://127.0.0.1:1080) |
 | Деплой | Docker Compose |
 
-## Деплой
+## Структура
+
+```
+config/          настройки Django, urls, wsgi
+schedule/        основное приложение: модели, views, шаблоны, парсер XLSX
+  management/commands/
+    start_tgbot.py   запуск Telegram-бота (long polling)
+    sync_yadisk.py   импорт расписания с Яндекс.Диска + уведомления
+tgbot/           логика бота: подписки, уведомления,inline-запросы
+xray/            конфиг Xray (прокси для доступа к Telegram API)
+deploy/          systemd-юниты для запуска без Docker (gunicorn, tgbot)
+```
+
+## Быстрый старт (локально)
 
 ```bash
-cp .env.example .env
-# заполни .env
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 
+cp .env.example .env   # для локальной разработки достаточно SECRET_KEY
+
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+Расписание загружается через админ-панель (`/admin-panel/`, файл XLSX) или командой:
+
+```bash
+python manage.py sync_yadisk
+```
+
+## Деплой (Docker Compose)
+
+```bash
+cp .env.example .env   # заполни SECRET_KEY, POSTGRES_PASSWORD, TELEGRAM_BOT_TOKEN...
 docker compose up -d --build
-docker compose exec web python manage.py migrate
-docker compose exec web python manage.py collectstatic --noinput
+# migrate и collectstatic выполняются автоматически при старте web
 docker compose exec web python manage.py createsuperuser
 ```
 
+Контейнеры: `web` (gunicorn :8000), `tgbot` (через Xray-прокси), `xray`, `redis`, `db`.
+Медиа-файлы конспектов монтируются с хоста в `/mnt/conspects`.
+
 ## Переменные окружения
 
-Скопируй `.env.example` и заполни:
+| Переменная | Назначение |
+|-----------|-----------|
+| `SECRET_KEY` | ключ Django — длинная случайная строка |
+| `DEBUG` | `False` в продакшене |
+| `ALLOWED_HOSTS` | домены через запятую |
+| `DATABASE_URL` | `postgres://schedule:pass@db:5432/schedule_db` |
+| `POSTGRES_PASSWORD` | пароль PostgreSQL (используется docker-compose) |
+| `REDIS_URL` | `redis://redis:6379/1` |
+| `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
+| `SCHEDULE_API_URL` | адрес сайта для бота (в compose: `http://web:8000`) |
+| `ADMIN_CHAT_ID` | Telegram chat_id администратора — уведомления и обратная связь |
+| `PROXY_URL` | для tgbot: `socks5://127.0.0.1:1080` (задаётся в docker-compose) |
 
-```
-SECRET_KEY=
-DEBUG=False
-ALLOWED_HOSTS=
-DATABASE_URL=postgres://user:pass@db:5432/dbname
-REDIS_URL=redis://redis:6379/1
-TELEGRAM_BOT_TOKEN=
-ADMIN_CHAT_ID=
-```
+## Парсер расписания
+
+`schedule/parser.py` читает фирменный xlsx техникума: блочная сетка 4 группы × 6 колонок,
+строки дисциплин чередуются со строками преподавателей, поддерживаются деление на подгруппы
+(«Иностранный язык 121 / 202»), «сам.изуч.», кабинеты со сдвигом колонки.
+Загрузка идемпотентна (`update_or_create` по дате+паре+подгруппе+группе+преподавателю).
+
+Группы ищутся устойчиво к регистру и написанию: `1ИСИП-23-9` и `1ИСиП-23-9` — одна группа
+(`Group.get_or_create_by_name` сопоставляет по slug).
 
 ---
 
