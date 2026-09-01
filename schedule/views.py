@@ -96,6 +96,9 @@ def teacher_schedule(request, pk):
 
 @login_required
 def admin_panel(request):
+    if not request.user.is_superuser:
+        messages.error(request, "Доступ запрещён.")
+        return redirect("schedule:conspect_list")
     stats = {
         "groups":   Group.objects.count(),
         "teachers": Teacher.objects.count(),
@@ -119,6 +122,9 @@ def admin_panel(request):
 
 @login_required
 def upload_schedule(request):
+    if not request.user.is_superuser:
+        messages.error(request, "Доступ запрещён.")
+        return redirect("schedule:conspect_list")
     if request.method != "POST" or "xlsx_file" not in request.FILES:
         return redirect("schedule:admin_panel")
 
@@ -166,6 +172,9 @@ def upload_schedule(request):
 
 @login_required
 def delete_date(request):
+    if not request.user.is_superuser:
+        messages.error(request, "Доступ запрещён.")
+        return redirect("schedule:conspect_list")
     if request.method == "POST":
         d = request.POST.get("date")
         if d:
