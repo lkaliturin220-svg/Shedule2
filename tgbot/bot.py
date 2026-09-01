@@ -21,6 +21,7 @@ from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
 )
+from aiogram.client.session.aiohttp import AiohttpSession
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,7 +32,8 @@ logger = logging.getLogger(__name__)
 TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
 BASE_URL = os.getenv("SCHEDULE_API_URL", "http://127.0.0.1:8000")
 
-bot     = Bot(token=TOKEN)
+_proxy   = os.getenv("PROXY_URL", "")
+bot      = Bot(token=TOKEN, session=AiohttpSession(proxy=_proxy) if _proxy else None)
 storage = MemoryStorage()
 dp      = Dispatcher(storage=storage)
 router  = Router()

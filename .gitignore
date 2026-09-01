@@ -19,3 +19,7 @@ media/
 Thumbs.db
 *.zip
 docker-compose.yml.save
+
+# secrets
+xray/
+config.json

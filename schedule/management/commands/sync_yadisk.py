@@ -273,7 +273,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {name} — без изменений ({file_date})")
 
         if imported:
-            cache.clear()
+            cache.clear()  # сбросить кэш страниц сайта
             _notify_subscribers(token, imported)
             self.stdout.write("Уведомления о новых датах отправлены.")
 
