@@ -53,7 +53,7 @@ body {
 a { color: var(--teal); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-.container { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+.container { max-width: 960px; margin: 0 auto; padding: 0 clamp(14px, 4vw, 20px); }
 
 /* ── Navbar ─────────────────────────────────────────────── */
 .navbar {
@@ -151,7 +151,7 @@ main { flex: 1; padding: 32px 0 52px; }
 .page-header { margin-bottom: 22px; }
 .page-header h1 {
   font-family: var(--serif);
-  font-size: 2.35rem; font-weight: 700; line-height: 1.12;
+  font-size: clamp(1.5rem, 1rem + 3.2vw, 2.35rem); font-weight: 700; line-height: 1.12;
   letter-spacing: -.01em;
 }
 .page-header h1 em, .home-hero h1 em { font-style: normal; color: var(--teal); }
@@ -168,7 +168,7 @@ main { flex: 1; padding: 32px 0 52px; }
 .home-hero { margin: 6px 0 30px; }
 .home-hero h1 {
   font-family: var(--serif);
-  font-size: 2.7rem; font-weight: 700; line-height: 1.1;
+  font-size: clamp(1.8rem, 1rem + 4.5vw, 2.7rem); font-weight: 700; line-height: 1.1;
   letter-spacing: -.01em;
 }
 .home-hero p { color: var(--muted); margin-top: 10px; font-size: .95rem; max-width: 560px; }
@@ -225,8 +225,8 @@ main { flex: 1; padding: 32px 0 52px; }
 /* ── Grids: группы / преподаватели / предметы ───────────── */
 .group-grid, .entity-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: clamp(8px, 2vw, 10px);
 }
 .group-grid a, .entity-grid a {
   display: flex; align-items: center; justify-content: center;
@@ -236,6 +236,7 @@ main { flex: 1; padding: 32px 0 52px; }
   font-size: .9rem; text-align: center;
   transition: border-color .15s, box-shadow .2s, transform .2s;
 }
+.group-grid a, .entity-grid a { overflow-wrap: anywhere; }
 .group-grid a:hover, .entity-grid a:hover {
   text-decoration: none; border-color: var(--teal);
   box-shadow: var(--lift); transform: translateY(-2px);
@@ -616,12 +617,8 @@ button.btn-submit:hover, .btn-submit:hover {
 
 /* ── Mobile ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .container { padding: 0 14px; }
   td, th { padding: 9px 11px; font-size: .84rem; }
-  .group-grid, .entity-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
   .subject-grid, .files-grid { grid-template-columns: 1fr; }
-  .home-hero h1 { font-size: 1.9rem; }
-  .page-header h1 { font-size: 1.7rem; }
   .form-row { grid-template-columns: 1fr; }
   .nav-user { display: none; }
   .tl-row { grid-template-columns: 96px 14px 1fr; }
