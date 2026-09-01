@@ -115,6 +115,12 @@ MEDIA_ROOT = BASE_DIR / "media"
 LOGIN_URL           = "/login/"
 LOGIN_REDIRECT_URL  = "/admin-panel/"
 LOGOUT_REDIRECT_URL = "/"
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 # ── Security (за NPMplus / Nginx) ─────────────────────────────────────────────
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
