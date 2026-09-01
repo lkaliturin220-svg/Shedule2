@@ -1,48 +1,57 @@
 {% extends "schedule/base.html" %}
+{% load schedule_tags %}
 {% block title %}Расписание занятий{% endblock %}
 {% block content %}
 
-<div class="page-header">
-  <h1>Расписание занятий</h1>
-  <p>Выберите группу или преподавателя для просмотра расписания</p>
+<div class="home-hero">
+  <h1>Расписание <em>занятий</em></h1>
+  <p>Выберите группу или преподавателя — расписание синхронизируется с техникумом автоматически.</p>
 </div>
 
-<div class="card">
-  <h2>📚 Группы</h2>
-  <div class="search-box">
-    <input type="text" id="sg" placeholder="Поиск группы…" oninput="filterList('sg','gg')" autocomplete="off">
-  </div>
-  {% if groups %}
-    <div class="entity-grid" id="gg">
-      {% for g in groups %}
-        <a href="{% url 'schedule:group' g.name %}">{{ g.name }}</a>
-      {% endfor %}
+<div class="home-grid">
+  <section class="card home-card">
+    <div class="home-card__head">
+      <h2>📚 Группы</h2>
+      <span class="count-pill">{{ groups|length }}</span>
     </div>
-  {% else %}
-    <div class="empty">
-      <div class="empty-icon">📭</div>
-      <p>Расписание ещё не загружено</p>
+    <div class="search-box">
+      <input type="text" id="sg" placeholder="Поиск группы…" oninput="filterList('sg','gg')" autocomplete="off">
     </div>
-  {% endif %}
-</div>
+    {% if groups %}
+      <div class="entity-grid" id="gg">
+        {% for g in groups %}
+          <a href="{% url 'schedule:group' g.name %}" data-name="{{ g.name }}">{{ g.name }}</a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">
+        <div class="empty-icon">📭</div>
+        <p>Расписание ещё не загружено</p>
+      </div>
+    {% endif %}
+  </section>
 
-<div class="card">
-  <h2>👨‍🏫 Преподаватели</h2>
-  <div class="search-box">
-    <input type="text" id="st" placeholder="Поиск преподавателя…" oninput="filterList('st','tg')" autocomplete="off">
-  </div>
-  {% if teachers %}
-    <div class="entity-grid" id="tg">
-      {% for t in teachers %}
-        <a href="{% url 'schedule:teacher' t.id %}">{{ t.name }}</a>
-      {% endfor %}
+  <section class="card home-card">
+    <div class="home-card__head">
+      <h2>👨‍🏫 Преподаватели</h2>
+      <span class="head-link"><a href="{% url 'schedule:teachers' %}">Все →</a></span>
     </div>
-  {% else %}
-    <div class="empty">
-      <div class="empty-icon">📭</div>
-      <p>Нет данных</p>
+    <div class="search-box">
+      <input type="text" id="st" placeholder="Поиск преподавателя…" oninput="filterList('st','tg')" autocomplete="off">
     </div>
-  {% endif %}
+    {% if teachers %}
+      <div class="entity-grid" id="tg">
+        {% for t in teachers %}
+          <a href="{{ t|teacher_link }}" data-id="{{ t.id }}">{{ t.name }}</a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">
+        <div class="empty-icon">📭</div>
+        <p>Нет данных</p>
+      </div>
+    {% endif %}
+  </section>
 </div>
 
 {% endblock %}

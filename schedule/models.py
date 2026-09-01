@@ -211,3 +211,16 @@ class Subscription(models.Model):
 
     def __str__(self):
         return f"chat={self.chat_id} → {self.group}"
+
+
+class ViewCounter(models.Model):
+    """Счётчик просмотров страниц (без IP и куки — только агрегат)."""
+    key   = models.CharField(max_length=120, unique=True, db_index=True)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Счётчик просмотров"
+        verbose_name_plural = "Счётчики просмотров"
+
+    def __str__(self):
+        return f"{self.key}: {self.count}"

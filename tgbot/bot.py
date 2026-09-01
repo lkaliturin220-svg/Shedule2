@@ -303,7 +303,7 @@ def _get_subscriptions(chat_id: int) -> list[str]:
 def _add_subscription(chat_id: int, group_name: str) -> bool:
     try:
         from schedule.models import Group, Subscription
-        group, _ = Group.objects.get_or_create(name=group_name)
+        group = Group.get_or_create_by_name(group_name)
         _, created = Subscription.objects.get_or_create(chat_id=chat_id, group=group)
         return created
     except Exception as e:

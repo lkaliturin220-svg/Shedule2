@@ -1,0 +1,32 @@
+{% extends "schedule/base.html" %}
+{% block title %}QR-код группы {{ group.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="{% url 'schedule:index' %}">Главная</a> / Группы / {{ group.name }} / QR
+</div>
+
+<div class="qr-page">
+  <h1>QR-код группы {{ group.name }}</h1>
+  <p class="qr-sub">Наведи камеру телефона — откроется расписание группы. Или отправь ссылку однокурсникам.</p>
+
+  <div class="qr-card">
+    <div class="qr-svg">{{ qr_svg }}</div>
+    <div class="qr-url" id="qr-url">{{ url }}</div>
+    <div class="qr-actions">
+      <button type="button" class="btn btn-primary" id="copy-url">📋 Скопировать ссылку</button>
+      <a class="btn btn-ghost" href="{{ url }}">Открыть расписание</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.getElementById('copy-url').addEventListener('click', function () {
+  const url = document.getElementById('qr-url').textContent.trim();
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
+    .then(() => { this.textContent = '✅ Скопировано'; setTimeout(() => this.textContent = '📋 Скопировать ссылку', 2000); })
+    .catch(() => {});
+});
+</script>
+{% endblock %}

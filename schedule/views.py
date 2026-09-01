@@ -1,17 +1,23 @@
+import re
 from datetime import date, datetime
 from functools import wraps
+from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.db import models as db_models
-from django.http import JsonResponse
+from django.db import IntegrityError, models as db_models, transaction
+from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.safestring import mark_safe
+from django.utils.text import slugify
 from django.views.decorators.cache import cache_page
 from django.views.decorators.gzip import gzip_page
 
-from .models import Conspect, ConspectDate, ConspectSubject, Group, InviteCode, Lesson, StudentProfile, Subject, Teacher
+from .models import Conspect, ConspectDate, ConspectSubject, Group, InviteCode, Lesson, StudentProfile, Subject, Teacher, ViewCounter
 from .parser import parse_xlsx
 
 
@@ -28,13 +34,17 @@ def _dates_for_qs(qs):
 
 
 def _resolve_date(request, dates):
+    """Дата из ?date=; иначе — сегодня (если есть занятия); иначе последняя."""
     selected = request.GET.get("date")
     if selected:
         try:
             return datetime.strptime(selected, "%Y-%m-%d").date()
         except ValueError:
             pass
-    return dates[0] if dates else date.today()
+    today = date.today()
+    if today in dates:
+        return today
+    return dates[0] if dates else today
 
 
 def superuser_required(view_func):
@@ -64,6 +74,40 @@ def index(request):
 
 # ──────────────────────────── public: group ──────────────────────────────────
 
+def _bump_counter(key):
+    """Безликий счётчик просмотров: только агрегат, без IP и куки."""
+    try:
+        with transaction.atomic():
+            obj, _ = ViewCounter.objects.get_or_create(key=key, defaults={"count": 0})
+            ViewCounter.objects.filter(pk=obj.pk).update(count=db_models.F("count") + 1)
+    except IntegrityError:
+        try:
+            ViewCounter.objects.filter(key=key).update(count=db_models.F("count") + 1)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _teacher_from_ref(ref):
+    """'12' или '12-ivanova-m-r' -> Teacher."""
+    m = re.match(r"^(\d+)", str(ref))
+    if not m:
+        raise Http404
+    return get_object_or_404(Teacher, pk=int(m.group(1)))
+
+
+def _teacher_slug(teacher):
+    return f"{teacher.pk}-{slugify(teacher.name, allow_unicode=True)}"
+
+
+def _render_schedule(request, template, ctx):
+    """AJAX-режим (?ajax=1) отдаёт только тело расписания для подмены."""
+    if request.GET.get("ajax"):
+        return render(request, "schedule/_schedule_body.html", ctx)
+    return render(request, template, ctx)
+
+
 @gzip_page
 @cache_page(120)
 def group_schedule(request, name):
@@ -76,20 +120,41 @@ def group_schedule(request, name):
           .order_by("pair_number", "subgroup")
           .select_related("teacher", "subject")
     )
-    return render(request, "schedule/group_schedule.html", {
+    _bump_counter(f"group:{group.name}")
+    return _render_schedule(request, "schedule/group_schedule.html", {
         "group":         group,
         "dates":         dates,
         "selected_date": sel,
         "lessons":       lessons,
+        "today":         date.today(),
     })
+
+
+@gzip_page
+def group_qr(request, name):
+    group = get_object_or_404(Group, name=name)
+    import qrcode
+    import qrcode.image.svg
+    url = request.build_absolute_uri(reverse("schedule:group", args=[group.name]))
+    img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage, box_size=14, border=2)
+    return render(request, "schedule/qr.html", {
+        "group":  group,
+        "qr_svg": mark_safe(img.to_string().decode()),
+        "url":    url,
+    })
+
+
+def teacher_url(teacher):
+    """Человекочитаемый URL преподавателя: /teacher/12-иванова-м-р/"""
+    return f"/teacher/{teacher.pk}-{slugify(teacher.name, allow_unicode=True)}/"
 
 
 # ──────────────────────────── public: teacher ────────────────────────────────
 
 @gzip_page
 @cache_page(120)
-def teacher_schedule(request, pk):
-    teacher = get_object_or_404(Teacher, pk=pk)
+def teacher_schedule(request, ref):
+    teacher = _teacher_from_ref(ref)
     qs      = Lesson.objects.filter(teacher=teacher).select_related("group", "subject")
     dates   = _dates_for_qs(qs)
     sel     = _resolve_date(request, dates)
@@ -98,12 +163,55 @@ def teacher_schedule(request, pk):
           .order_by("pair_number", "subgroup")
           .select_related("group", "subject")
     )
-    return render(request, "schedule/teacher_schedule.html", {
+    _bump_counter(f"teacher:{teacher.pk}")
+    return _render_schedule(request, "schedule/teacher_schedule.html", {
         "teacher":       teacher,
+        "teacher_slug":  _teacher_slug(teacher),
         "dates":         dates,
         "selected_date": sel,
         "lessons":       lessons,
+        "today":         date.today(),
     })
+
+
+@gzip_page
+@cache_page(120)
+def teachers_list(request):
+    q = request.GET.get("q", "").strip()
+    teachers = Teacher.objects.all()
+    if q:
+        teachers = teachers.filter(name__icontains=q)
+    return render(request, "schedule/teachers.html", {
+        "teachers": teachers,
+        "q":        q,
+    })
+
+
+# ──────────────────────────── sitemap / robots ───────────────────────────────
+
+@gzip_page
+def sitemap(request):
+    host = request.get_host()
+    scheme = request.scheme
+    urls = ["/", "/terms/", "/feedback/", "/conspects/", "/teachers/"]
+    urls += [f"/group/{quote(g.name)}/" for g in Group.objects.all()]
+    urls += [teacher_url(t) for t in Teacher.objects.all()]
+    urls += [f"/conspects/subject/{s.pk}/" for s in ConspectSubject.objects.all()]
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        xml.append(f"<url><loc>{scheme}://{host}{u}</loc></url>")
+    xml.append("</urlset>")
+    return HttpResponse("\n".join(xml), content_type="application/xml")
+
+
+@gzip_page
+def robots(request):
+    host = request.get_host()
+    body = ("User-agent: *\n"
+            "Disallow: /admin/\n"
+            f"Sitemap: {request.scheme}://{host}/sitemap.xml\n")
+    return HttpResponse(body, content_type="text/plain")
 
 
 # ──────────────────────────── admin panel ───────────────────────────────────
@@ -128,9 +236,23 @@ def admin_panel(request):
         )
         .order_by("-date")
     )
+    top_groups = (
+        ViewCounter.objects.filter(key__startswith="group:")
+        .order_by("-count")[:8]
+    )
+    top_teachers = (
+        ViewCounter.objects.filter(key__startswith="teacher:")
+        .order_by("-count")[:8]
+    )
+    for item in top_groups:
+        item.label = item.key.removeprefix("group:")
+    for item in top_teachers:
+        item.label = f"#{item.key.removeprefix('teacher:')}"
     return render(request, "schedule/admin_panel.html", {
-        "stats":      stats,
-        "date_stats": date_stats,
+        "stats":       stats,
+        "date_stats":  date_stats,
+        "top_groups":  top_groups,
+        "top_teachers": top_teachers,
     })
 
 
@@ -154,7 +276,7 @@ def upload_schedule(request):
             # Пропускаем строки без преподавателя — это технические строки
             teacher_name = row["teacher"] or "Не указан"
 
-            group_obj,   _ = Group.objects.get_or_create(name=row["group"])
+            group_obj = Group.get_or_create_by_name(row["group"])
             teacher_obj, _ = Teacher.objects.get_or_create(name=teacher_name)
             subject_obj, _ = Subject.objects.get_or_create(name=row["subject"])
 

@@ -1,72 +1,27 @@
 {% extends "schedule/base.html" %}
-{% load schedule_tags %}
+{% load schedule_tags static %}
 {% block title %}{{ teacher.name }} — Расписание{% endblock %}
+{% block og_title %}Расписание преподавателя {{ teacher.name }}{% endblock %}
+{% block og_desc %}Занятия преподавателя {{ teacher.name }} КГТТ: даты, пары, группы и аудитории.{% endblock %}
+
 {% block content %}
 
 <div class="breadcrumb">
-  <a href="{% url 'schedule:index' %}">Главная</a> / Преподаватели / {{ teacher.name }}
+  <a href="{% url 'schedule:index' %}">Главная</a> / <a href="{% url 'schedule:teachers' %}">Преподаватели</a> / {{ teacher.name }}
 </div>
 
 <div class="page-header">
   <h1>{{ teacher.name }}</h1>
   <p>Расписание преподавателя</p>
+  <button type="button" class="btn btn-ghost btn-fav js-fav-teacher" data-id="{{ teacher.id }}" data-name="{{ teacher.name }}">⭐ Сделать моим преподавателем</button>
 </div>
 
-<div class="card">
-  {% if dates %}
-    <form method="get" class="date-form">
-      <label for="date-sel">📅 Дата:</label>
-      <select name="date" id="date-sel" onchange="this.form.submit()">
-        {% for d in dates %}
-          <option value="{{ d|date:'Y-m-d' }}" {% if d == selected_date %}selected{% endif %}>
-            {{ d|date:"d.m.Y" }}
-          </option>
-        {% endfor %}
-      </select>
-    </form>
-  {% endif %}
-
-  {% if lessons %}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Пара</th>
-            <th>Дисциплина</th>
-            <th>Группа</th>
-            <th>Аудитория</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for l in lessons %}
-          <tr>
-            <td>
-              <div class="pair-cell">
-                <span class="badge-pair">{{ l.pair_number }}</span>
-                {% if l.subgroup %}<span class="badge-sub">пг {{ l.subgroup }}</span>{% endif %}
-                <span class="pair-time">{{ l.pair_number|pair_time }}</span>
-              </div>
-            </td>
-            <td>{{ l.subject.name }}</td>
-            <td>
-              <a href="{% url 'schedule:group' l.group.name %}">{{ l.group.name }}</a>
-            </td>
-            <td>
-              <span class="badge-room {% if l.room == 'Сам.изуч.' %}remote{% endif %}">
-                {{ l.room|default:"—" }}
-              </span>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <div class="empty">
-      <div class="empty-icon">📭</div>
-      <p>Нет занятий на выбранную дату</p>
-    </div>
-  {% endif %}
+<div id="schedule-body">
+  {% include "schedule/_schedule_body.html" %}
 </div>
 
+{% endblock %}
+{% block extra_js %}
+<script src="{% static 'js/schedule-live.js' %}" defer></script>
+<script src="{% static 'js/schedule-ajax.js' %}" defer></script>
 {% endblock %}

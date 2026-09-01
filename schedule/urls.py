@@ -1,12 +1,16 @@
 from django.urls import path, re_path
+from django.views.decorators.http import require_GET
+
 from . import views
 
 app_name = "schedule"
 
 urlpatterns = [
     path("",                              views.index,            name="index"),
+    re_path(r"^group/(?P<name>.+)/qr/$",  views.group_qr,         name="group_qr"),
     re_path(r"^group/(?P<name>.+)/$",     views.group_schedule,   name="group"),
-    path("teacher/<int:pk>/",             views.teacher_schedule, name="teacher"),
+    re_path(r"^teacher/(?P<ref>[^/]+)/$", views.teacher_schedule, name="teacher"),
+    path("teachers/",                     views.teachers_list,    name="teachers"),
 
     path("admin-panel/",                  views.admin_panel,      name="admin_panel"),
     path("upload/",                       views.upload_schedule,  name="upload"),
@@ -27,6 +31,9 @@ urlpatterns = [
 
     path("api/groups/",                         views.api_groups,            name="api_groups"),
     path("api/teachers/",                       views.api_teachers,          name="api_teachers"),
-    re_path(r"^api/schedule/group/(?P<name>.+)/$", views.api_group_schedule,   name="api_group_schedule"),
+    re_path(r"^api/schedule/group/(?P<name>.+)/$", views.api_group_schedule, name="api_group_schedule"),
     path("api/schedule/teacher/<int:pk>/",       views.api_teacher_schedule, name="api_teacher_schedule"),
+
+    path("sitemap.xml",                  views.sitemap),
+    path("robots.txt",                   views.robots),
 ]

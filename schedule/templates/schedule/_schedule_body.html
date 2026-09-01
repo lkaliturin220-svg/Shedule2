@@ -1,0 +1,47 @@
+{% load schedule_tags %}
+{% if dates %}
+  <div class="datebar">
+    <a class="chip chip-today {% if selected_date == today %}on{% endif %}"
+       href="?date={{ today|date:'Y-m-d' }}">Сегодня</a>
+    {% for d in dates %}
+      <a class="chip {% if d == selected_date and d != today %}on{% endif %}"
+         href="?date={{ d|date:'Y-m-d' }}">{{ d|date:"d.m" }} · {{ d|date:"D" }}</a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="card tl-card" data-today="{% if selected_date == today %}1{% else %}0{% endif %}">
+  <div class="tl-head">
+    <span class="tl-date">{{ selected_date|date:"d F Y" }}</span>
+    <span class="tl-head-actions">
+      {% if lessons %}<span class="count-pill">{{ lessons|length }} {{ lessons|length|plural_ru:"пара,пары,пар" }}</span>{% endif %}
+      <button type="button" class="btn-print" onclick="window.print()" title="Распечатать">🖨️</button>
+    </span>
+  </div>
+
+  {% if lessons %}
+    <div class="timeline">
+      {% for l in lessons %}
+        <div class="tl-row" data-start="{{ l.pair_number|pair_start }}" data-end="{{ l.pair_number|pair_end }}">
+          <div class="tl-time">
+            <b>{{ l.pair_number|pair_time }}</b>
+            <span>{{ l.pair_number }}-я пара{% if l.subgroup %} · пг {{ l.subgroup }}{% endif %}</span>
+          </div>
+          <div class="tl-rail"><i></i></div>
+          <div class="tl-body">
+            <h3>{{ l.subject.name }}</h3>
+            <div class="tl-meta">
+              {% if l.teacher %}<a href="{{ l.teacher|teacher_link }}">{{ l.teacher.name }}</a>{% endif %}
+            </div>
+          </div>
+          <div class="tl-room {% if l.room == 'Сам.изуч.' %}remote{% endif %}">{{ l.room|default:"—" }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">📭</div>
+      <p>Нет занятий на выбранную дату</p>
+    </div>
+  {% endif %}
+</div>
