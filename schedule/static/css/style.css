@@ -107,10 +107,12 @@ a:hover { text-decoration: underline; }
   padding: 6px; min-width: 158px; z-index: 300;
   display: flex; flex-direction: column; gap: 2px;
 }
+.theme-menu[hidden] { display: none; }
 .theme-menu button {
   display: flex; align-items: center; gap: 8px;
   border: none; background: none; cursor: pointer;
   font-family: var(--font); font-size: .87rem; font-weight: 500;
+.theme-menu[hidden] { display: none; }
   color: var(--ink); text-align: left;
   padding: 8px 12px; border-radius: 9px;
 }
@@ -169,7 +171,7 @@ main { flex: 1; padding: 32px 0 52px; }
   letter-spacing: -.01em;
 }
 .home-hero p { color: var(--muted); margin-top: 10px; font-size: .95rem; max-width: 560px; }
-.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.home-grid { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
 .home-card { margin-bottom: 0; transition: box-shadow .2s, transform .2s; }
 .home-card:hover { box-shadow: var(--lift); transform: translateY(-2px); }
 .home-card__head {
@@ -611,7 +613,6 @@ button.btn-submit:hover, .btn-submit:hover {
   td, th { padding: 9px 11px; font-size: .84rem; }
   .group-grid, .entity-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
   .subject-grid, .files-grid { grid-template-columns: 1fr; }
-  .home-grid { grid-template-columns: 1fr; }
   .home-hero h1 { font-size: 1.9rem; }
   .page-header h1 { font-size: 1.7rem; }
   .form-row { grid-template-columns: 1fr; }
