@@ -117,6 +117,57 @@ a:hover { text-decoration: underline; }
   color: var(--ink); text-align: left;
   padding: 8px 12px; border-radius: 9px;
 }
+
+/* ── AJAX-загрузка расписания: скелетон ─────────────────── */
+#schedule-body.is-loading .tl-card, #schedule-body.is-loading .datebar { visibility: hidden; }
+#schedule-body.is-loading {
+  min-height: 300px; position: relative;
+}
+#schedule-body.is-loading::after {
+  content: ''; position: absolute; inset: 40px 0 0;
+  border-radius: 14px; border: 1px solid var(--line);
+  background:
+    linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--teal) 9%, var(--card)) 50%, transparent 70%) 0 0 / 220% 100%,
+    repeating-linear-gradient(0deg, var(--card2) 0 44px, transparent 44px 62px);
+  animation: skeleton 1.1s linear infinite;
+}
+@keyframes skeleton {
+  from { background-position: -220% 0, 0 0; }
+  to   { background-position: 220% 0, 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #schedule-body.is-loading::after { animation: none; }
+}
+
+/* ── Кнопки в шапке страницы ────────────────────────────── */
+.header-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.head-link a { font-size: .84rem; font-weight: 700; }
+
+/* ── QR-страница ────────────────────────────────────────── */
+.qr-page { max-width: 480px; margin: 0 auto; text-align: center; }
+.qr-page h1 { font-family: var(--serif); font-size: 1.8rem; }
+.qr-sub { color: var(--muted); margin: 8px 0 22px; font-size: .9rem; }
+.qr-card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 18px; padding: 26px; box-shadow: var(--lift);
+}
+.qr-svg svg { width: 230px; height: 230px; }
+.qr-url {
+  font-family: ui-monospace, monospace; font-size: .78rem;
+  color: var(--muted); word-break: break-all; margin: 14px 0;
+}
+.qr-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ── Топ просмотров (админка) ───────────────────────────── */
+.top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.top-grid h3 { font-size: .9rem; margin-bottom: 10px; color: var(--muted); }
+.top-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+  font-size: .9rem; font-weight: 600;
+}
+.top-row:last-child { border-bottom: none; }
+.top-count { color: var(--teal); font-weight: 700; }
 .theme-menu button:hover { background: var(--card2); }
 .theme-menu button.on { color: var(--teal-h); font-weight: 700; background: var(--teal-soft); }
 .theme-menu button.on::after { content: '✓'; margin-left: auto; font-weight: 700; }

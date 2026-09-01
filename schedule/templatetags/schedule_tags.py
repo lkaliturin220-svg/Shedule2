@@ -1,6 +1,13 @@
 from django import template
+from django.utils.text import slugify
 
 register = template.Library()
+
+
+@register.filter
+def teacher_link(teacher):
+    """Человекочитаемый URL: /teacher/12-иванова-м-р/"""
+    return f"/teacher/{teacher.pk}-{slugify(teacher.name, allow_unicode=True)}/"
 
 
 PAIR_TIMES = {

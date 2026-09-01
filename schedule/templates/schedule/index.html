@@ -1,4 +1,5 @@
 {% extends "schedule/base.html" %}
+{% load schedule_tags %}
 {% block title %}Расписание занятий{% endblock %}
 {% block content %}
 
@@ -33,7 +34,7 @@
   <section class="card home-card">
     <div class="home-card__head">
       <h2>👨‍🏫 Преподаватели</h2>
-      <span class="count-pill">{{ teachers|length }}</span>
+      <span class="head-link"><a href="{% url 'schedule:teachers' %}">Все →</a></span>
     </div>
     <div class="search-box">
       <input type="text" id="st" placeholder="Поиск преподавателя…" oninput="filterList('st','tg')" autocomplete="off">
@@ -41,7 +42,7 @@
     {% if teachers %}
       <div class="entity-grid" id="tg">
         {% for t in teachers %}
-          <a href="{% url 'schedule:teacher' t.id %}" data-id="{{ t.id }}">{{ t.name }}</a>
+          <a href="{{ t|teacher_link }}" data-id="{{ t.id }}">{{ t.name }}</a>
         {% endfor %}
       </div>
     {% else %}

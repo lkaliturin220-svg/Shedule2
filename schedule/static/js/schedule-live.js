@@ -1,10 +1,7 @@
-// Живая подсветка пар на расписании: «идёт сейчас», «скоро», пройденные.
-// Работает только если выбран сегодняшний день (data-today="1").
+// Живая подсветка пар: «идёт сейчас», «скоро», пройденные.
+// Реинициализируется после AJAX-подмены расписания (window.initScheduleLive).
 (function () {
-  const card = document.querySelector('[data-today]');
-  if (!card || card.dataset.today !== '1') return;
-  const rows = [...card.querySelectorAll('.tl-row')];
-  if (!rows.length) return;
+  let timer = null;
 
   function toMin(hhmm) {
     const [h, m] = hhmm.split(':').map(Number);
@@ -18,7 +15,9 @@
     return n;
   }
 
-  function update() {
+  function update(card) {
+    const rows = [...card.querySelectorAll('.tl-row')];
+    if (!rows.length) return;
     const now = new Date();
     const cur = now.getHours() * 60 + now.getMinutes();
     let nextMarked = false;
@@ -51,6 +50,17 @@
     }
   }
 
-  update();
-  setInterval(update, 30000);
+  window.initScheduleLive = function () {
+    if (timer) { clearInterval(timer); timer = null; }
+    const card = document.querySelector('[data-today]');
+    if (!card || card.dataset.today !== '1') return;
+    update(card);
+    timer = setInterval(() => update(card), 30000);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', window.initScheduleLive);
+  } else {
+    window.initScheduleLive();
+  }
 })();

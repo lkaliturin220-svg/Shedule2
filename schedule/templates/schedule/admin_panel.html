@@ -77,6 +77,36 @@
 </div>
 {% endif %}
 
+{% if top_groups or top_teachers %}
+<div class="card">
+  <h2>👁️ Популярное</h2>
+  <div class="top-grid">
+    {% if top_groups %}
+      <div>
+        <h3>Группы</h3>
+        {% for t in top_groups %}
+          <div class="top-row">
+            <a href="{% url 'schedule:group' t.label %}">{{ t.label }}</a>
+            <span class="top-count">{{ t.count }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if top_teachers %}
+      <div>
+        <h3>Преподаватели</h3>
+        {% for t in top_teachers %}
+          <div class="top-row">
+            <span>{{ t.label }}</span>
+            <span class="top-count">{{ t.count }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>🔗 Ссылки</h2>
   <p><a href="/admin/">Django Admin →</a></p>

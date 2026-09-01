@@ -1,0 +1,45 @@
+{% extends "schedule/base.html" %}
+{% load schedule_tags %}
+{% block title %}Преподаватели — Расписание{% endblock %}
+{% block og_title %}Преподаватели КГТТ — расписание{% endblock %}
+
+{% block content %}
+
+<div class="home-hero">
+  <h1>Преподаватели</h1>
+  <p>Расписание любого преподавателя: выбери имя или найди поиском.</p>
+</div>
+
+<div class="card home-card">
+  <div class="home-card__head">
+    <h2>👨‍🏫 Все преподаватели</h2>
+    <span class="count-pill">{{ teachers|length }}</span>
+  </div>
+  <div class="search-box">
+    <input type="text" id="st" placeholder="Поиск преподавателя…" value="{{ q }}" autocomplete="off">
+  </div>
+  {% if teachers %}
+    <div class="entity-grid" id="tg">
+      {% for t in teachers %}
+        <a href="{{ t|teacher_link }}" data-id="{{ t.id }}">{{ t.name }}</a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">🔍</div>
+      <p>Никого не нашлось по запросу «{{ q }}»</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+const inp = document.getElementById('st');
+inp.addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  for (const el of document.getElementById('tg').children)
+    el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+});
+</script>
+{% endblock %}
