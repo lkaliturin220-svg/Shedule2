@@ -99,6 +99,24 @@ a:hover { text-decoration: underline; }
   cursor: pointer; font-size: .85rem; transition: border-color .15s;
 }
 .theme-btn:hover { border-color: var(--teal); }
+.theme-switch { position: relative; }
+.theme-menu {
+  position: absolute; right: 0; top: calc(100% + 8px);
+  background: var(--card); border: 1px solid var(--line-dark);
+  border-radius: 13px; box-shadow: var(--lift);
+  padding: 6px; min-width: 158px; z-index: 300;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.theme-menu button {
+  display: flex; align-items: center; gap: 8px;
+  border: none; background: none; cursor: pointer;
+  font-family: var(--font); font-size: .87rem; font-weight: 500;
+  color: var(--ink); text-align: left;
+  padding: 8px 12px; border-radius: 9px;
+}
+.theme-menu button:hover { background: var(--card2); }
+.theme-menu button.on { color: var(--teal-h); font-weight: 700; background: var(--teal-soft); }
+.theme-menu button.on::after { content: '✓'; margin-left: auto; font-weight: 700; }
 .btn-nav-register {
   background: var(--teal); color: #fff !important; font-weight: 700;
 }
