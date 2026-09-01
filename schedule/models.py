@@ -1,21 +1,9 @@
 from django.contrib.auth.models import User
 from django.db import models
-from django.utils.text import slugify  # добавить импорт сверху
 
 
 class Group(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=150, unique=True, blank=True, null=True, allow_unicode=True)
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            # Заменяем проблемные символы перед созданием слага
-            safe_name = self.name.replace('/', '-').replace(' ', '-')
-            self.slug = slugify(safe_name, allow_unicode=True)
-        super().save(*args, **kwargs)
-
-    def get_absolute_url(self):
-        return reverse('group_detail', kwargs={'slug': self.slug})
 
     def __str__(self):
         return self.name

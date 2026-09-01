@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -6,6 +7,7 @@ from django.core.cache import cache
 from django.db import models as db_models
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import cache_page
 from django.views.decorators.gzip import gzip_page
 
@@ -33,6 +35,18 @@ def _resolve_date(request, dates):
         except ValueError:
             pass
     return dates[0] if dates else date.today()
+
+
+def superuser_required(view_func):
+    """Только суперюзер: гость → на логин, студент → назад с ошибкой."""
+    @login_required
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_superuser:
+            messages.error(request, "Доступ запрещён.")
+            return redirect("schedule:conspect_list")
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 
 # ──────────────────────────── public: index ──────────────────────────────────
@@ -94,7 +108,7 @@ def teacher_schedule(request, pk):
 
 # ──────────────────────────── admin panel ───────────────────────────────────
 
-@login_required
+@superuser_required
 def admin_panel(request):
     if not request.user.is_superuser:
         messages.error(request, "Доступ запрещён.")
@@ -120,7 +134,7 @@ def admin_panel(request):
     })
 
 
-@login_required
+@superuser_required
 def upload_schedule(request):
     if not request.user.is_superuser:
         messages.error(request, "Доступ запрещён.")
@@ -170,13 +184,17 @@ def upload_schedule(request):
     return redirect("schedule:admin_panel")
 
 
-@login_required
+@superuser_required
 def delete_date(request):
     if not request.user.is_superuser:
         messages.error(request, "Доступ запрещён.")
         return redirect("schedule:conspect_list")
     if request.method == "POST":
-        d = request.POST.get("date")
+        raw = request.POST.get("date", "")
+        try:
+            d = datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError:
+            d = None
         if d:
             deleted, _ = Lesson.objects.filter(date=d).delete()
             _clear_cache()
@@ -196,8 +214,23 @@ def api_teachers(request):
     return JsonResponse({"teachers": teachers})
 
 
+def _api_date(request):
+    """Дата из ?date= (YYYY-MM-DD); None — если формат неверный."""
+    raw = request.GET.get("date", "")
+    if not raw:
+        return date.today()
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def api_group_schedule(request, name):
-    d = request.GET.get("date", str(date.today()))
+    d = _api_date(request)
+    if d is None:
+        return JsonResponse(
+            {"error": "Неверный формат даты, ожидается YYYY-MM-DD."}, status=400
+        )
     lessons = (
         Lesson.objects
         .filter(group__name=name, date=d)
@@ -214,11 +247,15 @@ def api_group_schedule(request, name):
         }
         for l in lessons
     ]
-    return JsonResponse({"group": name, "date": d, "lessons": data})
+    return JsonResponse({"group": name, "date": d.isoformat(), "lessons": data})
 
 
 def api_teacher_schedule(request, pk):
-    d = request.GET.get("date", str(date.today()))
+    d = _api_date(request)
+    if d is None:
+        return JsonResponse(
+            {"error": "Неверный формат даты, ожидается YYYY-MM-DD."}, status=400
+        )
     lessons = (
         Lesson.objects
         .filter(teacher_id=pk, date=d)
@@ -238,7 +275,7 @@ def api_teacher_schedule(request, pk):
     teacher_name = (
         Teacher.objects.filter(pk=pk).values_list("name", flat=True).first() or ""
     )
-    return JsonResponse({"teacher": teacher_name, "date": d, "lessons": data})
+    return JsonResponse({"teacher": teacher_name, "date": d.isoformat(), "lessons": data})
 
 
 # ─────────────────────────── Конспекты и ДЗ ───────────────────────────
@@ -369,6 +406,8 @@ def conspect_upload(request):
         date_str     = request.POST.get("date", "").strip()
         author_name  = request.POST.get("author_name", "").strip()
         file_type    = request.POST.get("file_type", "conspect")
+        if file_type not in dict(Conspect.TYPE_CHOICES):
+            file_type = "conspect"
         description  = request.POST.get("description", "").strip()
         upload_file  = request.FILES.get("file")
 
@@ -435,6 +474,10 @@ def student_register(request):
     """Регистрация студента по инвайт-коду."""
     from django.contrib.auth.models import User
     from django.contrib.auth import login as auth_login
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from django.db import transaction
+    from django.db.models import F
 
     if request.user.is_authenticated:
         return redirect("schedule:conspect_list")
@@ -452,8 +495,13 @@ def student_register(request):
             errors.append("Это имя уже занято, выберите другое.")
         if not password:
             errors.append("Введите пароль.")
-        elif len(password) < 4:
-            errors.append("Пароль должен быть не менее 4 символов.")
+        elif len(password) < 8:
+            errors.append("Пароль должен быть не менее 8 символов.")
+        else:
+            try:
+                validate_password(password, user=User(username=username))
+            except ValidationError as ve:
+                errors.extend(ve.messages)
         if password != password2:
             errors.append("Пароли не совпадают.")
         if not invite_raw:
@@ -468,16 +516,15 @@ def student_register(request):
             else:
                 if not invite.is_available:
                     errors.append("Инвайт-код исчерпан или деактивирован.")
-
         if errors:
             for e in errors:
                 messages.error(request, e)
             return render(request, "schedule/student_register.html", {"post": request.POST})
 
-        user = User.objects.create_user(username=username, password=password)
-        StudentProfile.objects.create(user=user, group=invite.group, invite=invite)
-        invite.used += 1
-        invite.save(update_fields=["used"])
+        with transaction.atomic():
+            user = User.objects.create_user(username=username, password=password)
+            StudentProfile.objects.create(user=user, group=invite.group, invite=invite)
+            InviteCode.objects.filter(pk=invite.pk).update(used=F("used") + 1)
 
         auth_login(request, user)
         messages.success(request, f"Добро пожаловать, {username}! Вы зарегистрированы как студент группы {invite.group}.")
@@ -499,8 +546,12 @@ def student_login(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             auth_login(request, user)
-            next_url = request.POST.get("next") or request.GET.get("next") or "schedule:conspect_list"
-            return redirect(next_url)
+            next_url = request.POST.get("next") or request.GET.get("next") or ""
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(next_url)
+            return redirect("schedule:conspect_list")
         else:
             messages.error(request, "Неверное имя пользователя или пароль.")
 
@@ -546,11 +597,9 @@ def conspect_delete(request, pk):
     return render(request, "schedule/conspect_confirm_delete.html", {"conspect": conspect})
 
 
+@superuser_required
 def conspect_moderation(request):
     """Страница модерации конспектов — только для суперюзеров."""
-    if not request.user.is_superuser:
-        messages.error(request, "Доступ запрещён.")
-        return redirect("schedule:conspect_list")
 
     # Фильтры
     group_filter = request.GET.get("group", "")
@@ -580,10 +629,13 @@ def conspect_moderation(request):
 
 def feedback(request):
     import os, requests as req
+    from html import escape
     from .models import Feedback
 
     if request.method == "POST":
         category = request.POST.get("category", "other")
+        if category not in dict(Feedback.CATEGORY_CHOICES):
+            category = "other"
         text     = request.POST.get("text", "").strip()
         contact  = request.POST.get("contact", "").strip()
 
@@ -599,8 +651,8 @@ def feedback(request):
                 msg = (
                     f"<b>Новое сообщение #{fb.pk}</b>\n"
                     f"{label}\n\n"
-                    f"{text}\n\n"
-                    f"Контакт: {contact or 'не указан'}"
+                    f"{escape(text)}\n\n"
+                    f"Контакт: {escape(contact) or 'не указан'}"
                 )
                 try:
                     req.post(
