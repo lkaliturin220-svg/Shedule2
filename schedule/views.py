@@ -258,7 +258,7 @@ def upload_schedule(request):
             # Пропускаем строки без преподавателя — это технические строки
             teacher_name = row["teacher"] or "Не указан"
 
-            group_obj,   _ = Group.objects.get_or_create(name=row["group"])
+            group_obj = Group.get_or_create_by_name(row["group"])
             teacher_obj, _ = Teacher.objects.get_or_create(name=teacher_name)
             subject_obj, _ = Subject.objects.get_or_create(name=row["subject"])
 

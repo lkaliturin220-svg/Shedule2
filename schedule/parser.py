@@ -129,7 +129,7 @@ def _parse_block_B(row, teacher_row, col) -> tuple:
     subj2 = _cell(row, col + 2)
     room2 = _normalize_room(_cell(row, col + 3))
     # Кабинет целой группы (если нет подгрупп)
-    room_single = _normalize_room(_cell(row, col + 4))
+    room_single = _normalize_room(_cell(row, col + 4) or _cell(row, col + 5))
 
     teach1 = teach2 = ""
     if teacher_row is not None:

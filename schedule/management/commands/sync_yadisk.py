@@ -71,7 +71,7 @@ def _replace_date_lessons(file_date, lessons):
     for row in lessons:
         if not row["subject"] or not row["group"]:
             continue
-        group, _ = Group.objects.get_or_create(name=row["group"])
+        group = Group.get_or_create_by_name(row["group"])
         teacher, _ = Teacher.objects.get_or_create(
             name=" ".join(row["teacher"].split()) if row["teacher"] else "Не указан"
         )

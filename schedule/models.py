@@ -14,6 +14,16 @@ class Group(models.Model):
             self.slug = slugify(safe_name, allow_unicode=True)
         super().save(*args, **kwargs)
 
+    @classmethod
+    def get_or_create_by_name(cls, name: str) -> "Group":
+        """get_or_create(name=...), устойчивый к регистру/тире: если группа
+        с таким slug уже есть (напр. '1ИСиП-23-9' vs '1ИСИП-23-9') — вернём её."""
+        g = cls.objects.filter(name=name).first()
+        if g is None:
+            safe = name.replace("/", "-").replace(" ", "-")
+            g = cls.objects.filter(slug=slugify(safe, allow_unicode=True)).first()
+        return g if g else cls.objects.create(name=name)
+
     def get_absolute_url(self):
         return reverse('group_detail', kwargs={'slug': self.slug})
 
