@@ -36,6 +36,7 @@
           </div>
           <div class="tl-room {% if l.room == 'Сам.изуч.' %}remote{% endif %}">{{ l.room|default:"—" }}</div>
         </div>
+      {% endfor %}
     </div>
   {% else %}
     <div class="empty">

@@ -6,7 +6,7 @@ from urllib.parse import quote
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.db import models as db_models
+from django.db import IntegrityError, models as db_models, transaction
 from django.http import HttpResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -65,7 +65,14 @@ def index(request):
 def _bump_counter(key):
     """Безликий счётчик просмотров: только агрегат, без IP и куки."""
     try:
-        ViewCounter.objects.filter(key=key).update(count=db_models.F("count") + 1)
+        with transaction.atomic():
+            obj, _ = ViewCounter.objects.get_or_create(key=key, defaults={"count": 0})
+            ViewCounter.objects.filter(pk=obj.pk).update(count=db_models.F("count") + 1)
+    except IntegrityError:
+        try:
+            ViewCounter.objects.filter(key=key).update(count=db_models.F("count") + 1)
+        except Exception:
+            pass
     except Exception:
         pass
 

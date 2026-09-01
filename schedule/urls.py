@@ -6,9 +6,10 @@ from . import views
 app_name = "schedule"
 
 urlpatterns = [
+    path("",                              views.index,            name="index"),
     re_path(r"^group/(?P<name>.+)/qr/$",  views.group_qr,         name="group_qr"),
     re_path(r"^group/(?P<name>.+)/$",     views.group_schedule,   name="group"),
-    path("teacher/<slug:ref>/",           views.teacher_schedule, name="teacher"),
+    re_path(r"^teacher/(?P<ref>[^/]+)/$", views.teacher_schedule, name="teacher"),
     path("teachers/",                     views.teachers_list,    name="teachers"),
 
     path("admin-panel/",                  views.admin_panel,      name="admin_panel"),
