@@ -16,3 +16,18 @@ def pair_time(pair_number):
         8: "20:25–21:55",
     }
     return times.get(pair_number, "")
+
+
+@register.filter
+def plural_ru(value, forms):
+    """Русская плюрализация: {{ n|plural_ru:"пара,пары,пар" }}."""
+    n = abs(int(value)) % 100
+    form1, form2, form5 = forms.split(",")
+    if 11 <= n <= 14:
+        return form5
+    d = n % 10
+    if d == 1:
+        return form1
+    if 2 <= d <= 4:
+        return form2
+    return form5
