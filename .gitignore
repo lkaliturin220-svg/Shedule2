@@ -23,3 +23,6 @@ docker-compose.yml.save
 # secrets
 xray/
 config.json
+
+# локальные сетевые оверрайды (не публикуем)
+docker-compose.override.yml
