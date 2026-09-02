@@ -38,8 +38,8 @@
 | База данных | PostgreSQL 16 |
 | Кеш и сессии | Redis 7 (страницы кешируются 120 с) |
 | Фронтенд | Ванильный JS + CSS, без сборки и фреймворков |
-| Бот | aiogram 3 (long polling через SOCKS5-прокси) |
-| Прокси для бота | Xray (socks5://127.0.0.1:1080) |
+| Бот | aiogram 3 (long polling) |
+| Сеть | Telegram Bot API |
 | Деплой | Docker Compose |
 
 ## Структура
@@ -51,7 +51,6 @@ schedule/        основное приложение: модели, views, ш�
     start_tgbot.py   запуск Telegram-бота (long polling)
     sync_yadisk.py   импорт расписания с Яндекс.Диска + уведомления
 tgbot/           логика бота: подписки, уведомления,inline-запросы
-xray/            конфиг Xray (прокси для доступа к Telegram API)
 deploy/          systemd-юниты для запуска без Docker (gunicorn, tgbot)
 ```
 
@@ -83,7 +82,7 @@ docker compose up -d --build
 docker compose exec web python manage.py createsuperuser
 ```
 
-Контейнеры: `web` (gunicorn :8000), `tgbot` (через Xray-прокси), `xray`, `redis`, `db`.
+Контейнеры: `web` (gunicorn :8000), `tgbot`, `redis`, `db`.
 Медиа-файлы конспектов монтируются с хоста в `/mnt/conspects`.
 
 ## Переменные окружения
@@ -99,7 +98,6 @@ docker compose exec web python manage.py createsuperuser
 | `TELEGRAM_BOT_TOKEN` | токен от @BotFather |
 | `SCHEDULE_API_URL` | адрес сайта для бота (в compose: `http://web:8000`) |
 | `ADMIN_CHAT_ID` | Telegram chat_id администратора — уведомления и обратная связь |
-| `PROXY_URL` | для tgbot: `socks5://127.0.0.1:1080` (задаётся в docker-compose) |
 
 ## Парсер расписания
 
