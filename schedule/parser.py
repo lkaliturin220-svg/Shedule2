@@ -258,6 +258,32 @@ def parse_xlsx(file_path_or_bytes) -> dict:
     }
 
 
+# ── Нормализация ФИО преподавателя ──────────────────────────────────────────
+_CONS_TAIL_RE = re.compile(
+    r"\s*[\(\[]?(?:конс|консул|консульт|консультац\w*)[\.\)\]]?\s*$",
+    re.IGNORECASE,
+)
+_JUNK_TAIL_RE = re.compile(
+    r"\s*[\(\[]?(?:сам\.?\s?изуч\w*|пп)\]?[\.)]?\s*$", re.IGNORECASE
+)
+
+
+def _normalize_teacher(raw: str) -> str:
+    """«Фамилия И.О.», «Фамилия И. О.» → «Фамилия И. О.»; срезает хвосты «конс»."""
+    if not raw:
+        return ""
+    name = raw.strip()
+    # срезаем служебные хвосты: (конс), консульт., Сам.изуч, (ПП)
+    name = _CONS_TAIL_RE.sub("", name)
+    name = _JUNK_TAIL_RE.sub("", name)
+    name = re.sub(r"\s{2,}", " ", name).strip(" .,")
+    # инициалы: «И.О.» / «И. О.» → «И. О.» (ровно один пробел между)
+    m = re.match(r"^(.{2,}?)\s+([А-ЯЁA-Z])\.\s*([А-ЯЁA-Z])\.?\s*$", name)
+    if m:
+        return f"{m.group(1)} {m.group(2)}. {m.group(3)}."
+    return name
+
+
 def _make(date, dow, pair, subgroup, group, teacher, subject, room) -> dict:
     return {
         "date":        date,
@@ -265,7 +291,7 @@ def _make(date, dow, pair, subgroup, group, teacher, subject, room) -> dict:
         "pair_number": pair,
         "subgroup":    subgroup,
         "group":       group,
-        "teacher":     teacher.strip() if teacher else "",
+        "teacher":     _normalize_teacher(teacher),
         "subject":     subject.strip(),
         "room":        room,
     }
