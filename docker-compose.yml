@@ -22,7 +22,6 @@ services:
     command: python manage.py start_tgbot
     network_mode: host
     env_file: .env
-    environment:
     restart: always
 
   redis:
