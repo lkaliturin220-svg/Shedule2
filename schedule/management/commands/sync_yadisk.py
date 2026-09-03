@@ -39,8 +39,11 @@ def _get_file_list():
 
 
 def _download_file(filename):
+    # Yandex API requires an absolute path (leading "/") for public resources;
+    # a bare filename returns 404 DiskNotFoundError (observed 2026-09-03).
     dl = requests.get(f"{API_BASE}/download",
-                      params={"public_key": PUBLIC_KEY, "path": filename}, timeout=15)
+                      params={"public_key": PUBLIC_KEY,
+                              "path": "/" + filename.lstrip("/")}, timeout=15)
     dl.raise_for_status()
     f = requests.get(dl.json()["href"], timeout=30)
     f.raise_for_status()

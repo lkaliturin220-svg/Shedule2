@@ -5,6 +5,14 @@ from django.db import models
 class Group(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
+    @classmethod
+    def get_or_create_by_name(cls, name: str) -> "Group":
+        """get_or_create(name=...), устойчивый к регистру:
+        '1ИСИП-23-9' и '1ИСиП-23-9' — одна группа (iexact-lookup)."""
+        name = " ".join(name.split())
+        g = cls.objects.filter(name__iexact=name).first()
+        return g if g else cls.objects.create(name=name)
+
     def __str__(self):
         return self.name
 
