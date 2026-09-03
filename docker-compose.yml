@@ -8,6 +8,8 @@ services:
       - static_data:/app/staticfiles
       - /mnt/conspects:/app/media
     env_file: .env
+    environment:
+      - SYNC_ON_REQUEST=1
     depends_on:
       db:
         condition: service_healthy
@@ -22,6 +24,29 @@ services:
     command: python manage.py start_tgbot
     network_mode: host
     env_file: .env
+    restart: always
+
+  sync:
+    # Гибридный синк: доставляет в TG очередь уведомлений от web-синка
+    # (через socks-прокси xray на хосте) и подстраховывает ленивый синк.
+    build: .
+    command: >
+      sh -c "while true; do
+               python manage.py flush_notify || true;
+               python manage.py sync_yadisk || true;
+               sleep 300;
+             done"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # в .env прокси на 127.0.0.1 (для host-network tgbot); здесь мост на хост
+      - PROXY_URL=socks5://host.docker.internal:1080
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: always
 
   redis:

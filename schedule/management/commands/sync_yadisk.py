@@ -207,12 +207,28 @@ def _notify_changes(token, changes_by_date):
                  f"<b>Обновление расписания</b> — {total} изм. ({ds_list})\n{SITE_URL}")
 
 
+def _queue_notify(payload):
+    """Кладёт событие в Redis-список yadisk:notify; доставляет flush_notify
+    (sync-контейнер, у которого есть socks-маршрут до api.telegram.org)."""
+    try:
+        import json
+        from django_redis import get_redis_connection
+        client = get_redis_connection("default")
+        client.rpush("yadisk:notify", json.dumps(payload, ensure_ascii=False))
+    except Exception as e:
+        logger.warning("notify queue push failed: %s", e)
+
+
 class Command(BaseCommand):
     help = "Синхронизация расписания с Яндекс.Диском: новые даты и изменения"
 
+    def add_arguments(self, parser):
+        parser.add_argument("--force", action="store_true",
+                            help="игнорировать md5-кэш, качать все файлы")
+
     def handle(self, *args, **kwargs):
         self.stdout.write("=== sync_yadisk ===")
-        token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        force = kwargs.get("force", False)
 
         try:
             items = _get_file_list()
@@ -242,6 +258,13 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {name} — не удалось извлечь дату, пропускаю")
                 continue
 
+            # Дешёвый контроль изменности: md5/modified прямо из листинга.
+            etag = item.get("md5") or item.get("modified") or ""
+            prev = cache.get(f"yadisk:md5:{name}")
+            if not force and etag and prev == etag:
+                self.stdout.write(f"  {name} — без изменений (md5), пропускаю")
+                continue
+
             try:
                 content = _download_file(name)
                 self.stdout.write(f"  {name} — скачан ({len(content)//1024} KB)")
@@ -262,6 +285,9 @@ class Command(BaseCommand):
                 self.stderr.write(f"  {name} — [ОШИБКА сохранения] {e}")
                 continue
 
+            if etag:
+                cache.set(f"yadisk:md5:{name}", etag, 60 * 60 * 24 * 30)
+
             if not existed:
                 self.stdout.write(f"  {name} — новая дата {file_date}: {count} занятий")
                 groups_in_file = set(l["group"] for l in lessons if l["group"])
@@ -277,13 +303,17 @@ class Command(BaseCommand):
 
         if imported:
             cache.clear()  # сбросить кэш страниц сайта
-            _notify_subscribers(token, imported)
-            self.stdout.write("Уведомления о новых датах отправлены.")
+            _queue_notify({"type": "new",
+                           "imported": [[g, d.isoformat(), c]
+                                        for g, d, c in imported]})
+            self.stdout.write("Уведомления о новых датах — в очереди Redis.")
 
         if changes_by_date:
             cache.clear()
-            _notify_changes(token, changes_by_date)
-            self.stdout.write("Уведомления об изменениях отправлены.")
+            _queue_notify({"type": "changes", "changes": {
+                d.isoformat(): [[g, gl] for g, gl in pairs]
+                for d, pairs in changes_by_date.items()}})
+            self.stdout.write("Уведомления об изменениях — в очереди Redis.")
 
         total = sum(c for _, _, c in imported)
         self.stdout.write(f"=== Готово. Новых занятий: {total} ===")

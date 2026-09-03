@@ -24,6 +24,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "schedule.middleware.LazySyncMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.cache.UpdateCacheMiddleware",      # кэш страниц (Redis)
@@ -93,6 +94,7 @@ SESSION_ENGINE      = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 
 CACHE_MIDDLEWARE_SECONDS    = 120
+SYNC_ON_REQUEST = os.getenv("SYNC_ON_REQUEST", "") == "1"
 CACHE_MIDDLEWARE_KEY_PREFIX = "site"
 
 # ── Static ────────────────────────────────────────────────────────────────────
