@@ -113,7 +113,6 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; gap: 8px;
   border: none; background: none; cursor: pointer;
   font-family: var(--font); font-size: .87rem; font-weight: 500;
-.theme-menu[hidden] { display: none; }
   color: var(--ink); text-align: left;
   padding: 8px 12px; border-radius: 9px;
 }
@@ -272,6 +271,39 @@ main { flex: 1; padding: 32px 0 52px; }
   background: var(--teal); border-color: var(--teal); color: #fff; font-weight: 700;
 }
 [data-theme="dark"] .chip.on { color: #0f172a; }
+.date-go { display: flex; align-items: center; gap: 8px; }
+.date-go input[type="date"] {
+  font: inherit; font-size: .82rem; font-weight: 600; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-dark);
+  border-radius: 99px; padding: 7px 12px;
+}
+.date-go input[type="date"]:focus { outline: none; border-color: var(--teal); }
+.date-go .chip-go { font-family: inherit; }
+
+/* ── Мобилка: меню темы не должно вылезать за экран ─────── */
+@media (max-width: 480px) {
+  .theme-menu {
+    position: fixed;
+    right: 10px;
+    top: 60px;          /* ниже sticky-шапки (min-height 55px) */
+    left: auto;
+    min-width: 150px;
+    max-width: calc(100vw - 20px);
+  }
+}
+
+/* ── Мобилка: чипы дат — горизонтальный скролл вместо переноса ── */
+@media (max-width: 480px) {
+  .datebar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .datebar::-webkit-scrollbar { display: none; }
+  .chip { flex: 0 0 auto; }
+}
 
 /* ── Grids: группы / преподаватели / предметы ───────────── */
 .group-grid, .entity-grid {
@@ -727,4 +759,14 @@ button.btn-submit:hover, .btn-submit:hover {
   .nav-user { display: none; }
   .tl-row { grid-template-columns: 96px 14px 1fr; }
   .tl-room { grid-column: 2 / 4; justify-self: start; margin-top: 8px; }
+  /* Тема: меню не должно вылезать за экран — якорим к контейнеру шапки */
+  .navbar .container { position: relative; }
+  .theme-switch { position: static; }
+  .theme-menu { right: 15px; }
+  /* Дата-чипсы: горизонтальная прокрутка вместо переноса */
+  .datebar {
+    flex-wrap: nowrap; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .datebar::-webkit-scrollbar { display: none; }
 }

@@ -25,10 +25,17 @@
   }
 
   document.addEventListener("click", function (e) {
-    const chip = e.target.closest("#schedule-body .chip");
+    const chip = e.target.closest("#schedule-body a.chip");
     if (!chip) return;
     e.preventDefault();
     load(chip.getAttribute("href"), true);
+  });
+
+  document.addEventListener("submit", function (e) {
+    const form = e.target.closest("#schedule-body .date-go");
+    if (!form) return;
+    e.preventDefault();
+    load("?date=" + encodeURIComponent(form.elements.date.value), true);
   });
 
   window.addEventListener("popstate", function () {

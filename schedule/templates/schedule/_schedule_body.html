@@ -1,6 +1,11 @@
 {% load schedule_tags %}
 {% if dates %}
   <div class="datebar">
+    <form method="get" class="date-go">
+      <input type="date" name="date" value="{{ selected_date|date:'Y-m-d' }}"
+             min="{{ dates|first|date:'Y-m-d' }}" max="{{ dates|last|date:'Y-m-d' }}">
+      <button class="chip chip-go" type="submit">Перейти</button>
+    </form>
     <a class="chip chip-today {% if selected_date == today %}on{% endif %}"
        href="?date={{ today|date:'Y-m-d' }}">Сегодня</a>
     {% for d in dates %}
