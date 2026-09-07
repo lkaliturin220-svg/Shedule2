@@ -3,6 +3,7 @@ services:
     build: .
     command: >
       sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
              gunicorn -c gunicorn.conf.py config.wsgi:application"
     volumes:
       - static_data:/app/staticfiles
