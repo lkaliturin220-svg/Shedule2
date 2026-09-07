@@ -280,6 +280,12 @@ main { flex: 1; padding: 32px 0 52px; }
 .date-go input[type="date"]:focus { outline: none; border-color: var(--teal); }
 .date-go .chip-go { font-family: inherit; }
 
+/* ── Группа в паре (страница преподавателя) ─────────────── */
+.tl-group { color: var(--muted); }
+.tl-group::before { content: '·'; margin: 0 6px; }
+.tl-group a { color: var(--teal-h); font-weight: 600; text-decoration: none; }
+.tl-group a:hover { text-decoration: underline; }
+
 /* ── Мобилка: меню темы не должно вылезать за экран ─────── */
 @media (max-width: 480px) {
   .theme-menu {

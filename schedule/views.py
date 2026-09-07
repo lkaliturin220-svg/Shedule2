@@ -167,6 +167,7 @@ def teacher_schedule(request, ref):
     return _render_schedule(request, "schedule/teacher_schedule.html", {
         "teacher":       teacher,
         "teacher_slug":  _teacher_slug(teacher),
+        "show_groups":   True,
         "dates":         dates,
         "selected_date": sel,
         "lessons":       lessons,

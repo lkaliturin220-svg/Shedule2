@@ -10,6 +10,12 @@ def teacher_link(teacher):
     return f"/teacher/{teacher.pk}-{slugify(teacher.name, allow_unicode=True)}/"
 
 
+@register.filter
+def group_link(group):
+    """Человекочитаемый URL: /group/ИСИП-23-9/"""
+    return f"/group/{group.name}/"
+
+
 PAIR_TIMES = {
     1: ("08:30", "10:00"),
     2: ("10:20", "11:50"),

@@ -37,6 +37,7 @@
             <h3>{{ l.subject.name }}</h3>
             <div class="tl-meta">
               {% if l.teacher %}<a href="{{ l.teacher|teacher_link }}">{{ l.teacher.name }}</a>{% endif %}
+              {% if l.group and show_groups %}<span class="tl-group"><a href="{{ l.group|group_link }}">{{ l.group.name }}</a></span>{% endif %}
             </div>
           </div>
           <div class="tl-room {% if l.room == 'Сам.изуч.' %}remote{% endif %}">{{ l.room|default:"—" }}</div>
