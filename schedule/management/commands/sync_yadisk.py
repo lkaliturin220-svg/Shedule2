@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 from io import BytesIO
 
@@ -20,6 +20,7 @@ API_BASE   = "https://cloud-api.yandex.net/v1/disk/public/resources"
 SITE_URL   = "https://kemgtt.serverkiwi.ru"
 
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+DATE_DOT_RE = re.compile(r"(\d{2}\.\d{2})")  # Студентам 09.09.xlsx
 
 
 def _extract_date(filename):
@@ -27,6 +28,13 @@ def _extract_date(filename):
     if m:
         try:
             return datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    m = DATE_DOT_RE.search(filename)
+    if m:
+        try:
+            d = datetime.strptime(m.group(1), "%d.%m").date()
+            return d.replace(year=date.today().year)
         except ValueError:
             return None
     return None
@@ -236,11 +244,13 @@ class Command(BaseCommand):
             self.stderr.write(f"[ОШИБКА] {e}")
             return
 
-        xlsx_files = [
-            item for item in items
-            if item.get("name", "").startswith("studentam_")
-            and item.get("name", "").endswith(".xlsx")
-        ]
+        def _is_student_file(n):
+            n_low = n.lower()
+            return n.endswith(".xlsx") and (
+                n.startswith("studentam_") or n_low.startswith("студентам")
+            )
+
+        xlsx_files = [item for item in items if _is_student_file(item.get("name", ""))]
 
         if not xlsx_files:
             self.stdout.write("Файлов не найдено.")
