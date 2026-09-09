@@ -221,6 +221,29 @@ class Subscription(models.Model):
         return f"chat={self.chat_id} → {self.group}"
 
 
+class ChatBinding(models.Model):
+    """Привязка Telegram-чата к расписанию одной группы (+ топик форума).
+
+    Один чат = одна группа: обновления приходят ТОЛЬКО по ней, в заданный
+    топик (thread_id), если чат является форум-группой. Управление: /bind,
+    /settopic, /unbind в боте.
+    """
+    chat_id    = models.BigIntegerField(unique=True, verbose_name="Telegram chat_id")
+    group      = models.ForeignKey(Group, on_delete=models.CASCADE,
+                                   related_name="chat_bindings", verbose_name="Группа расписания")
+    thread_id  = models.BigIntegerField(null=True, blank=True, verbose_name="ID топика (message_thread_id)")
+    created_by = models.BigIntegerField(null=True, blank=True, verbose_name="Кто привязал (tg user id)")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name        = "Привязка чата"
+        verbose_name_plural = "Привязки чатов"
+
+    def __str__(self):
+        topic = f" #{self.thread_id}" if self.thread_id else ""
+        return f"chat={self.chat_id} → {self.group}{topic}"
+
+
 class ViewCounter(models.Model):
     """Счётчик просмотров страниц (без IP и куки — только агрегат)."""
     key   = models.CharField(max_length=120, unique=True, db_index=True)

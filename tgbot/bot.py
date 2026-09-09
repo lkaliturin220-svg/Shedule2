@@ -117,6 +117,25 @@ def date_nav_kb(prefix: str, key: str, d: str, extra_rows: list = None) -> Inlin
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _groups_kb(prefix: str, groups: list, with_date: bool = True) -> InlineKeyboardMarkup:
+    """Сетка кнопок 3 в ряд. with_date — дописать сегодняшнюю дату в callback."""
+    rows, row = [], []
+    for g in groups:
+        data = f"{prefix}:{g}:{date.today()}" if with_date else f"{prefix}:{g}"
+        row.append(InlineKeyboardButton(text=g, callback_data=data))
+        if len(row) == 3:
+            rows.append(row); row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _topic_kwargs(message: Message) -> dict:
+    """В форум-чатах — ответ в тот же топик, откуда пришла команда."""
+    tid = getattr(message, "message_thread_id", None)
+    return {"message_thread_id": tid} if tid else {}
+
+
 def main_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -133,6 +152,18 @@ async def safe_edit(call: CallbackQuery, text: str, markup: InlineKeyboardMarkup
         await call.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
     except Exception:
         await call.message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+async def _is_chat_admin(message: Message) -> bool:
+    """В личке — сам хозяин; в группах — только администраторы чата."""
+    if message.chat.type == "private":
+        return True
+    try:
+        member = await bot.get_chat_member(message.chat.id, message.from_user.id)
+        return member.status in ("creator", "administrator")
+    except Exception as e:
+        logger.warning("get_chat_member error: %s", e)
+        return False
 
 
 # ── FSM States ───────────────────────────────────────────────────────────────
@@ -153,6 +184,8 @@ async def cmd_start(message: Message, state: FSMContext):
         "📚 <b>Группы</b> — расписание для студентов\n"
         "👨‍🏫 <b>Преподаватели</b> — расписание для педагогов\n"
         "🔔 <b>Мои подписки</b> — авто-уведомления о новом расписании\n\n"
+        "👑 Админ группового чата? Напиши <b>/bind</b> — привяжу чат к расписанию "
+        "одной группы (можно в топик форума).\n\n"
         "Выбери нужный раздел:",
         reply_markup=main_kb(),
         parse_mode="HTML",
@@ -189,7 +222,12 @@ async def cmd_help(message: Message):
         "/teachers — список преподавателей\n"
         "/subscribe — мои подписки\n"
         "/unsubscribe — отписаться от всех\n\n"
-        "📢 Бот работает в групповых чатах — добавь и напиши /subscribe",
+        "<b>Для групповых чатов (админам):</b>\n"
+        "/bind — привязать чат к расписанию одной группы\n"
+        "/settopic — слать обновления в этот топик (форум-группы)\n"
+        "/binding — текущая привязка чата\n"
+        "/unbind — отвязать чат\n\n"
+        "📢 Привязанный чат получает обновления <b>только своей группы</b>.",
         parse_mode="HTML",
     )
 
@@ -204,18 +242,9 @@ async def cmd_groups(message: Message):
     if not groups:
         return await message.answer("⚠️ Нет данных о группах. Попробуй позже.")
 
-    rows = []
-    row  = []
-    for g in groups:
-        row.append(InlineKeyboardButton(text=g, callback_data=f"grp:{g}:{date.today()}"))
-        if len(row) == 3:
-            rows.append(row); row = []
-    if row:
-        rows.append(row)
-
     await message.answer(
         "📚 <b>Выбери группу:</b>",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        reply_markup=_groups_kb("grp", groups),
         parse_mode="HTML",
     )
 
@@ -337,6 +366,7 @@ async def cb_sub_add(call: CallbackQuery):
             f"Как только появится новое расписание — пришлю сюда автоматически.\n"
             f"Управление подписками: кнопка <b>🔔 Мои подписки</b>",
             parse_mode="HTML",
+            **_topic_kwargs(call.message),
         )
     else:
         await call.answer(f"Ты уже подписан на группу {group}", show_alert=True)
@@ -450,6 +480,161 @@ async def cmd_unsubscribe(message: Message):
         await message.answer("⚠️ Ошибка при отписке. Попробуй позже.")
 
 
+# ── Привязка чата к расписанию одной группы (+ топик) ────────────────────────
+
+def _bind_chat(chat_id: int, group_name: str, thread_id, user_id: int) -> bool:
+    try:
+        from schedule.models import ChatBinding, Group
+        group = Group.get_or_create_by_name(group_name)
+        ChatBinding.objects.update_or_create(
+            chat_id=chat_id,
+            defaults={"group": group, "thread_id": thread_id, "created_by": user_id},
+        )
+        return True
+    except Exception as e:
+        logger.error("DB error bind_chat: %s", e)
+        return False
+
+
+def _set_thread(chat_id: int, thread_id: int) -> bool:
+    try:
+        from schedule.models import ChatBinding
+        updated = ChatBinding.objects.filter(chat_id=chat_id).update(thread_id=thread_id)
+        return updated > 0
+    except Exception as e:
+        logger.error("DB error set_thread: %s", e)
+        return False
+
+
+@router.message(Command("bind"))
+async def cmd_bind(message: Message):
+    if not await _is_chat_admin(message):
+        return await message.answer(
+            "🔒 Привязывать чат к группе могут только админы чата.",
+            **_topic_kwargs(message),
+        )
+    groups = (await api_get("/api/groups/")).get("groups", [])
+    if not groups:
+        return await message.answer("⚠️ Нет данных о группах. Попробуй позже.", **_topic_kwargs(message))
+
+    hint = ""
+    if message.chat.is_forum:
+        hint = ("\n\nЭтот чат — форум: топик возьму текущий"
+                if getattr(message, "message_thread_id", None)
+                else "\n\nЭто чат-форум: после выбора напиши /settopic в нужном топике.")
+
+    await message.answer(
+        "📌 <b>Какую группу расписания привязать к этому чату?</b>\n"
+        "Обновления будут приходить <b>только по ней</b>." + hint,
+        reply_markup=_groups_kb("bind", groups, with_date=False),
+        parse_mode="HTML",
+        **_topic_kwargs(message),
+    )
+
+
+@router.callback_query(F.data.startswith("bind:"))
+async def cb_bind(call: CallbackQuery):
+    group  = call.data.split(":", 1)[1]
+    chat   = call.message.chat
+    thread = getattr(call.message, "message_thread_id", None)
+
+    loop = asyncio.get_event_loop()
+    ok   = await loop.run_in_executor(None, _bind_chat, chat.id, group, thread, call.from_user.id)
+    if not ok:
+        return await call.answer("⚠️ Ошибка базы — попробуй позже", show_alert=True)
+
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    if chat.is_forum and not thread:
+        text = (
+            f"✅ <b>Чат привязан к группе {group}</b>\n\n"
+            f"Это чат-форум: напиши <b>/settopic</b> внутри нужного топика,\n"
+            f"чтобы обновления приходили туда (пока пойдут в «Общий»)."
+        )
+    else:
+        where = "в этот топик" if thread else "сюда"
+        text = (
+            f"✅ <b>Чат привязан к группе {group}</b>\n\n"
+            f"Обновления — <b>только по этой группе</b>, пришлю {where}.\n"
+            f"Сменить группу — /bind, топик — /settopic, отвязать — /unbind."
+        )
+    await call.message.answer(text, parse_mode="HTML", **_topic_kwargs(call.message))
+    await call.answer()
+
+
+@router.message(Command("settopic"))
+async def cmd_settopic(message: Message):
+    if not await _is_chat_admin(message):
+        return await message.answer("🔒 Менять топик могут только админы чата.", **_topic_kwargs(message))
+    if not message.chat.is_forum:
+        return await message.answer(
+            "Этот чат — не форум: топиков нет, обновления идут в общий поток.",
+            **_topic_kwargs(message),
+        )
+    thread = getattr(message, "message_thread_id", None)
+    if thread is None:
+        return await message.answer(
+            "Напиши эту команду внутри нужного топика — я привяжу его.",
+            **_topic_kwargs(message),
+        )
+    loop = asyncio.get_event_loop()
+    ok   = await loop.run_in_executor(None, _set_thread, message.chat.id, thread)
+    if ok:
+        await message.answer(
+            "✅ Обновления расписания будут приходить в этот топик.",
+            **_topic_kwargs(message),
+        )
+    else:
+        await message.answer("⚠️ Сначала привяжи чат к группе: /bind", **_topic_kwargs(message))
+
+
+@router.message(Command("binding"))
+async def cmd_binding(message: Message):
+    def _get():
+        from schedule.models import ChatBinding
+        b = ChatBinding.objects.filter(chat_id=message.chat.id).select_related("group").first()
+        if not b:
+            return None
+        return b.group.name, b.thread_id
+
+    loop = asyncio.get_event_loop()
+    res  = await loop.run_in_executor(None, _get)
+    if not res:
+        return await message.answer(
+            "Этот чат не привязан. /bind — привязать к расписанию одной группы.",
+            **_topic_kwargs(message),
+        )
+    name, thread = res
+    topic = f", топик #{thread}" if thread else ""
+    await message.answer(
+        f"📌 Этот чат привязан к группе <b>{name}</b>{topic}.\n"
+        f"Обновления приходят только по ней. /bind — сменить, /unbind — отвязать.",
+        parse_mode="HTML",
+        **_topic_kwargs(message),
+    )
+
+
+@router.message(Command("unbind"))
+async def cmd_unbind(message: Message):
+    if not await _is_chat_admin(message):
+        return await message.answer("🔒 Отвязывать чат могут только админы чата.", **_topic_kwargs(message))
+
+    def _del():
+        from schedule.models import ChatBinding
+        deleted, _ = ChatBinding.objects.filter(chat_id=message.chat.id).delete()
+        return deleted
+
+    loop    = asyncio.get_event_loop()
+    deleted = await loop.run_in_executor(None, _del)
+    if deleted:
+        await message.answer("✅ Чат отвязан — обновления больше не приходят.", **_topic_kwargs(message))
+    else:
+        await message.answer("Этот чат и не был привязан.", **_topic_kwargs(message))
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main():
@@ -463,4 +648,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
