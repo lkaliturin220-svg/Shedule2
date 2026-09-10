@@ -120,24 +120,48 @@ class Command(BaseCommand):
             if retry is not None:
                 targets = [(t[0], t[1], t[2]) for t in retry]
             else:
-                from schedule.models import ChatBinding, Subscription
+                from schedule.models import ChatBinding, ChatTopicBinding, Subscription
                 names = _names(payload)
 
+                # 1) Топик-биндинги: топик → своя группа (форум-чаты)
+                topic_bindings = list(ChatTopicBinding.objects.filter(
+                    group__name__in=names).select_related("group"))
+                topic_target_keys = {(t.chat_id, t.thread_id) for t in topic_bindings}
+                targets = []
+                for t in topic_bindings:
+                    text_t = _render(payload, only_group=t.group.name)
+                    if text_t:
+                        targets.append((t.chat_id, t.thread_id, text_t))
+
+                # 2) Привязка всего чата (не-форумы / General) — без дублей с топиками
                 bindings = list(ChatBinding.objects.filter(
                     group__name__in=names).select_related("group"))
                 bound_ids = {b.chat_id for b in bindings}
-                targets = []
                 for b in bindings:
+                    if (b.chat_id, b.thread_id) in topic_target_keys:
+                        continue  # этот чат уже обслужен топик-биндингами
                     text_b = _render(payload, only_group=b.group.name)
                     if text_b:
                         targets.append((b.chat_id, b.thread_id, text_b))
 
+                # 3) Подписки — помним топик, где оформили (форум), иначе общий поток
                 sub_chats = set(Subscription.objects.filter(
                     group__name__in=names
                 ).exclude(chat_id__in=bound_ids).values_list("chat_id", flat=True))
                 text_all = _render(payload)
-                for c in sub_chats:
-                    targets.append((c, None, text_all))
+                for s in Subscription.objects.filter(
+                        group__name__in=names).exclude(chat_id__in=bound_ids) \
+                        .select_related("group"):
+                    if not text_all:
+                        break
+                    if s.thread_id:
+                        key = (s.chat_id, s.thread_id)
+                        if key in topic_target_keys:
+                            continue
+                        targets.append((s.chat_id, s.thread_id, text_all))
+                    elif s.chat_id in sub_chats:
+                        targets.append((s.chat_id, None, text_all))
+                sub_chats -= {c for c, _t, _x in targets if _t is None}
 
                 admin_chat_id = os.getenv("ADMIN_CHAT_ID")
                 if admin_chat_id:

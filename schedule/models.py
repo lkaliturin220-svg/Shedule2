@@ -206,10 +206,16 @@ class StudentProfile(models.Model):
 
 
 class Subscription(models.Model):
-    """Подписка студента на уведомления о расписании своей группы."""
+    """Подписка студента на уведомления о расписании своей группы.
+
+    thread_id — топик форума, в котором оформили подписку: уведомления
+    приходят именно туда. None — общий поток чата (личка / General).
+    """
     chat_id    = models.BigIntegerField(db_index=True, verbose_name="Telegram chat_id")
     group      = models.ForeignKey(Group, on_delete=models.CASCADE,
                                    related_name="subscriptions", verbose_name="Группа")
+    thread_id  = models.BigIntegerField(null=True, blank=True,
+                                        verbose_name="ID топика подписки (message_thread_id)")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -242,6 +248,30 @@ class ChatBinding(models.Model):
     def __str__(self):
         topic = f" #{self.thread_id}" if self.thread_id else ""
         return f"chat={self.chat_id} → {self.group}{topic}"
+
+
+class ChatTopicBinding(models.Model):
+    """Привязка ОТДЕЛЬНОГО ТОПИКА форума к расписанию одной группы.
+
+    Один топик = одна группа; в одном форум-чате можно привязать много
+    топиков к разным группам. Управление: /bind внутри топика, /binding —
+    список, /unbind — отвязать (в форуме — текущий топик).
+    """
+    chat_id    = models.BigIntegerField(db_index=True, verbose_name="Telegram chat_id")
+    thread_id  = models.BigIntegerField(db_index=True,
+                                        verbose_name="ID топика (message_thread_id)")
+    group      = models.ForeignKey(Group, on_delete=models.CASCADE,
+                                   related_name="topic_bindings", verbose_name="Группа расписания")
+    created_by = models.BigIntegerField(null=True, blank=True, verbose_name="Кто привязал (tg user id)")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together     = [("chat_id", "thread_id")]
+        verbose_name        = "Привязка топика"
+        verbose_name_plural = "Привязки топиков"
+
+    def __str__(self):
+        return f"chat={self.chat_id} #{self.thread_id} → {self.group}"
 
 
 class ViewCounter(models.Model):

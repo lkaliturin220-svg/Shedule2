@@ -224,10 +224,12 @@ async def cmd_help(message: Message):
         "/unsubscribe — отписаться от всех\n\n"
         "<b>Для групповых чатов (админам):</b>\n"
         "/bind — привязать чат к расписанию одной группы\n"
+        "   в чате-форуме привяжет <b>текущий топик</b> к своей группе\n"
         "/settopic — слать обновления в этот топик (форум-группы)\n"
-        "/binding — текущая привязка чата\n"
-        "/unbind — отвязать чат\n\n"
-        "📢 Привязанный чат получает обновления <b>только своей группы</b>.",
+        "/binding — текущая привязка чата (и список топиков)\n"
+        "/unbind — отвязать чат (в форуме — текущий топик)\n\n"
+        "📢 Привязанный чат получает обновления <b>только своей группы</b>.\n"
+        "🔔 Подписка из топика форума придёт обратно в этот же топик.",
         parse_mode="HTML",
     )
 
@@ -329,12 +331,15 @@ def _get_subscriptions(chat_id: int) -> list[str]:
         return []
 
 
-def _add_subscription(chat_id: int, group_name: str) -> bool:
+def _add_subscription(chat_id: int, group_name: str, thread_id: int | None = None) -> bool:
     try:
         from schedule.models import Group, Subscription
         group = Group.get_or_create_by_name(group_name)
-        _, created = Subscription.objects.get_or_create(chat_id=chat_id, group=group)
-        return created
+        _, created = Subscription.objects.update_or_create(
+            chat_id=chat_id, group=group,
+            defaults={"thread_id": thread_id},
+        )
+        return True
     except Exception as e:
         logger.error("DB error add_subscription: %s", e)
         return False
@@ -353,23 +358,27 @@ def _remove_subscription(chat_id: int, group_name: str) -> bool:
 @router.callback_query(F.data.startswith("sub_add:"))
 async def cb_sub_add(call: CallbackQuery):
     group   = call.data.split(":", 1)[1]
-    chat_id = call.message.chat.id
+    chat    = call.message.chat
+    chat_id = chat.id
+    # В форум-чате запоминаем топик, из которого подписались (в General — None)
+    thread  = getattr(call.message, "message_thread_id", None) if chat.is_forum else None
 
-    loop    = asyncio.get_event_loop()
-    created = await loop.run_in_executor(None, _add_subscription, chat_id, group)
+    loop = asyncio.get_event_loop()
+    ok   = await loop.run_in_executor(None, _add_subscription, chat_id, group, thread)
 
-    if created:
+    if ok:
+        where = f" в топик <b>#{thread}</b>" if thread else ""
         await call.answer(f"✅ Подписка на группу {group} оформлена!", show_alert=True)
         await call.message.answer(
             f"🔔 <b>Подписка оформлена!</b>\n\n"
             f"Группа: <b>{group}</b>\n\n"
-            f"Как только появится новое расписание — пришлю сюда автоматически.\n"
+            f"Как только появится новое расписание — пришлю автоматически{where}.\n"
             f"Управление подписками: кнопка <b>🔔 Мои подписки</b>",
             parse_mode="HTML",
             **_topic_kwargs(call.message),
         )
     else:
-        await call.answer(f"Ты уже подписан на группу {group}", show_alert=True)
+        await call.answer(f"⚠️ Не смог оформить подписку на {group}", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("sub_del:"))
@@ -496,6 +505,20 @@ def _bind_chat(chat_id: int, group_name: str, thread_id, user_id: int) -> bool:
         return False
 
 
+def _bind_topic(chat_id: int, thread_id: int, group_name: str, user_id: int) -> bool:
+    try:
+        from schedule.models import ChatTopicBinding, Group
+        group = Group.get_or_create_by_name(group_name)
+        ChatTopicBinding.objects.update_or_create(
+            chat_id=chat_id, thread_id=thread_id,
+            defaults={"group": group, "created_by": user_id},
+        )
+        return True
+    except Exception as e:
+        logger.error("DB error bind_topic: %s", e)
+        return False
+
+
 def _set_thread(chat_id: int, thread_id: int) -> bool:
     try:
         from schedule.models import ChatBinding
@@ -519,9 +542,12 @@ async def cmd_bind(message: Message):
 
     hint = ""
     if message.chat.is_forum:
-        hint = ("\n\nЭтот чат — форум: топик возьму текущий"
-                if getattr(message, "message_thread_id", None)
-                else "\n\nЭто чат-форум: после выбора напиши /settopic в нужном топике.")
+        if getattr(message, "message_thread_id", None):
+            hint = ("\n\nЭтот чат — форум: привяжу <b>именно этот топик</b> "
+                    "к выбранной группе (другие топики — свои).")
+        else:
+            hint = ("\n\nЭто чат-форум: напиши /bind внутри нужного топика — привяжу топик к группе.\n"
+                    "Или выбери сейчас — привяжется весь чат (Общий).")
 
     await message.answer(
         "📌 <b>Какую группу расписания привязать к этому чату?</b>\n"
@@ -539,7 +565,10 @@ async def cb_bind(call: CallbackQuery):
     thread = getattr(call.message, "message_thread_id", None)
 
     loop = asyncio.get_event_loop()
-    ok   = await loop.run_in_executor(None, _bind_chat, chat.id, group, thread, call.from_user.id)
+    if chat.is_forum and thread:
+        ok = await loop.run_in_executor(None, _bind_topic, chat.id, thread, group, call.from_user.id)
+    else:
+        ok = await loop.run_in_executor(None, _bind_chat, chat.id, group, thread, call.from_user.id)
     if not ok:
         return await call.answer("⚠️ Ошибка базы — попробуй позже", show_alert=True)
 
@@ -548,11 +577,18 @@ async def cb_bind(call: CallbackQuery):
     except Exception:
         pass
 
-    if chat.is_forum and not thread:
+    if chat.is_forum and thread:
+        text = (
+            f"✅ <b>Топик #{thread} привязан к группе {group}</b>\n\n"
+            f"Обновления по группе <b>{group}</b> будут приходить в этот топик.\n"
+            f"Другие топики можно привязать к своим группам: /bind внутри них.\n"
+            f"Список привязок — /binding, отвязать этот топик — /unbind."
+        )
+    elif chat.is_forum and not thread:
         text = (
             f"✅ <b>Чат привязан к группе {group}</b>\n\n"
-            f"Это чат-форум: напиши <b>/settopic</b> внутри нужного топика,\n"
-            f"чтобы обновления приходили туда (пока пойдут в «Общий»)."
+            f"Это чат-форум: обновления пойдут в «Общий».\n"
+            f"Хочешь отдельные группы по топикам — /bind внутри каждого топика."
         )
     else:
         where = "в этот топик" if thread else "сюда"
@@ -577,14 +613,16 @@ async def cmd_settopic(message: Message):
     thread = getattr(message, "message_thread_id", None)
     if thread is None:
         return await message.answer(
-            "Напиши эту команду внутри нужного топика — я привяжу его.",
+            "Напиши эту команду внутри нужного топика — я привяжу его.\n"
+            "(В форуме проще: /bind внутри топика привяжет его к группе.)",
             **_topic_kwargs(message),
         )
     loop = asyncio.get_event_loop()
     ok   = await loop.run_in_executor(None, _set_thread, message.chat.id, thread)
     if ok:
         await message.answer(
-            "✅ Обновления расписания будут приходить в этот топик.",
+            "✅ Обновления расписания будут приходить в этот топик.\n"
+            "Хочешь разные группы по топикам — /bind внутри каждого топика.",
             **_topic_kwargs(message),
         )
     else:
@@ -593,28 +631,32 @@ async def cmd_settopic(message: Message):
 
 @router.message(Command("binding"))
 async def cmd_binding(message: Message):
-    def _get():
-        from schedule.models import ChatBinding
+    def _get_all():
+        from schedule.models import ChatBinding, ChatTopicBinding
         b = ChatBinding.objects.filter(chat_id=message.chat.id).select_related("group").first()
-        if not b:
-            return None
-        return b.group.name, b.thread_id
+        topics = list(ChatTopicBinding.objects.filter(chat_id=message.chat.id)
+                      .select_related("group").order_by("thread_id"))
+        return b, topics
 
     loop = asyncio.get_event_loop()
-    res  = await loop.run_in_executor(None, _get)
-    if not res:
+    b, topics = await loop.run_in_executor(None, _get_all)
+    if not b and not topics:
         return await message.answer(
-            "Этот чат не привязан. /bind — привязать к расписанию одной группы.",
+            "Этот чат не привязан. /bind — привязать чат или топик к расписанию группы.",
             **_topic_kwargs(message),
         )
-    name, thread = res
-    topic = f", топик #{thread}" if thread else ""
-    await message.answer(
-        f"📌 Этот чат привязан к группе <b>{name}</b>{topic}.\n"
-        f"Обновления приходят только по ней. /bind — сменить, /unbind — отвязать.",
-        parse_mode="HTML",
-        **_topic_kwargs(message),
+
+    lines = ["📌 <b>Привязки этого чата:</b>\n"]
+    if b:
+        topic = f", топик #{b.thread_id}" if b.thread_id else ""
+        lines.append(f"• Весь чат → <b>{b.group.name}</b>{topic}")
+    for t in topics:
+        lines.append(f"• Топик #{t.thread_id} → <b>{t.group.name}</b>")
+    lines.append(
+        "\nОбновления приходят только по привязанным группам.\n"
+        "/bind — привязать/сменить (в форуме — текущий топик), /unbind — отвязать."
     )
+    await message.answer("\n".join(lines), parse_mode="HTML", **_topic_kwargs(message))
 
 
 @router.message(Command("unbind"))
@@ -622,17 +664,29 @@ async def cmd_unbind(message: Message):
     if not await _is_chat_admin(message):
         return await message.answer("🔒 Отвязывать чат могут только админы чата.", **_topic_kwargs(message))
 
-    def _del():
-        from schedule.models import ChatBinding
-        deleted, _ = ChatBinding.objects.filter(chat_id=message.chat.id).delete()
-        return deleted
+    chat    = message.chat
+    thread  = getattr(message, "message_thread_id", None)
 
-    loop    = asyncio.get_event_loop()
-    deleted = await loop.run_in_executor(None, _del)
+    def _del():
+        from schedule.models import ChatBinding, ChatTopicBinding
+        if chat.is_forum and thread:
+            deleted, _ = ChatTopicBinding.objects.filter(chat_id=chat.id, thread_id=thread).delete()
+            return deleted, "топик"
+        deleted, _ = ChatBinding.objects.filter(chat_id=chat.id).delete()
+        return deleted, "чат"
+
+    loop            = asyncio.get_event_loop()
+    deleted, target = await loop.run_in_executor(None, _del)
     if deleted:
-        await message.answer("✅ Чат отвязан — обновления больше не приходят.", **_topic_kwargs(message))
+        await message.answer(
+            f"✅ {target.capitalize()} отвязан" + (" (в форуме — текущий топик)." if chat.is_forum else " — обновления больше не приходят."),
+            **_topic_kwargs(message),
+        )
     else:
-        await message.answer("Этот чат и не был привязан.", **_topic_kwargs(message))
+        await message.answer(
+            "Этот топик и не был привязан." if (chat.is_forum and thread) else "Этот чат и не был привязан.",
+            **_topic_kwargs(message),
+        )
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
