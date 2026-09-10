@@ -3,6 +3,7 @@ Telegram-бот расписания (aiogram 3).
 Запуск через management command: python manage.py start_tgbot
 """
 import asyncio
+import io
 import logging
 import os
 from datetime import date, timedelta
@@ -289,10 +290,52 @@ async def cb_grp(call: CallbackQuery):
     sub_row = [[InlineKeyboardButton(
         text="🔔 Подписаться на уведомления",
         callback_data=f"sub_add:{group}"
-    )]]
+    )], [
+        InlineKeyboardButton(text="🖼 Картинкой", callback_data=f"img:grp:{group}:{d}")
+    ]]
 
     await safe_edit(call, text, date_nav_kb("grp", group, d, sub_row))
     await call.answer()
+
+
+# ── Карточка расписания картинкой ─────────────────────────────────────────────
+
+async def _send_schedule_image(message: Message, kind: str, key: str, d: str):
+    """Отрендерить PNG-карточку и отправить в тот же чат/топик."""
+    from tgbot.schedule_card import render_schedule_card
+
+    if kind == "grp":
+        data = await api_get(f"/api/schedule/group/{key}/", {"date": d})
+        title = f"Группа {key}"
+        lessons = data.get("lessons", [])
+        extra = "teacher"
+    else:
+        data = await api_get(f"/api/schedule/teacher/{key}/", {"date": d})
+        title = data.get("teacher", key)
+        lessons = data.get("lessons", [])
+        extra = "group"
+
+    for l in lessons:
+        l.setdefault("time", PAIR_TIMES.get(l.get("pair"), ""))
+
+    png = await asyncio.get_event_loop().run_in_executor(
+        None, render_schedule_card, title, fmt_date_ru(d), lessons, extra)
+    if not png:
+        return await message.answer("⚠️ Не смог собрать картинку, попробуй позже.")
+
+    caption = f"📚 {title} · {fmt_date_ru(d)}\n📝 Подробности и навигация — текстом в боте"
+    if len(caption) > 1024:
+        caption = caption[:1021] + "…"
+    photo = io.BytesIO(png)
+    photo.name = "schedule.png"
+    await message.answer_photo(photo, caption=caption, parse_mode="HTML")
+
+
+@router.callback_query(F.data.startswith("img:"))
+async def cb_schedule_image(call: CallbackQuery):
+    _, kind, key, d = call.data.split(":", 3)
+    await call.answer("Готовлю картинку…")
+    await _send_schedule_image(call.message, kind, key, d)
 
 
 # ── Расписание преподавателя (с навигацией) ───────────────────────────────────
@@ -310,7 +353,9 @@ async def cb_tch(call: CallbackQuery):
         f"{fmt_lessons(data.get('lessons', []), 'group')}"
     )
 
-    await safe_edit(call, text, date_nav_kb("tch", pk, d))
+    await safe_edit(call, text, date_nav_kb("tch", pk, d, [
+        [InlineKeyboardButton(text="🖼 Картинкой", callback_data=f"img:tch:{pk}:{d}")]
+    ]))
     await call.answer()
 
 

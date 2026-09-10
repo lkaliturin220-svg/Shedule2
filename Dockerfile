@@ -7,7 +7,7 @@ ENV DJANGO_SETTINGS_MODULE=config.settings
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc && \
+    libpq-dev gcc fonts-dejavu-core && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

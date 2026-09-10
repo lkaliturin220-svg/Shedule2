@@ -13,3 +13,4 @@ python-dotenv>=1.0
 redis>=5.0
 requests>=2.31
 whitenoise>=6.5
+Pillow>=10.0
