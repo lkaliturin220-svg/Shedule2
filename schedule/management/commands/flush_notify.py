@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import date
 
 from django.core.management.base import BaseCommand
 
@@ -192,25 +193,30 @@ class Command(BaseCommand):
                 from schedule.models import ChatBinding, ChatTopicBinding, Subscription
                 names = _names(payload)
 
-                # Даты события (для карточек): новые — все imported-даты,
-                # изменения — ключи changes
+                # Даты события (для карточек): ближайшая предстоящая (>= сегодня),
+                # иначе самая ранняя
                 if payload.get("type") == "new":
                     event_dates = list(dict.fromkeys(d for _g, d, _c in payload["imported"]))
                 else:
                     event_dates = list(payload.get("changes", {}).keys())
+                today = date.today().isoformat()
+                upcoming = sorted(d for d in event_dates if d >= today)
+                card_date = upcoming[0] if upcoming else (min(event_dates) if event_dates else None)
 
                 # 1) Топик-биндинги: топик → своя группа (форум-чаты)
                 #    Отправляем КАРТИНКУ расписания своей группы на дату события
                 topic_bindings = list(ChatTopicBinding.objects.filter(
                     group__name__in=names).select_related("group"))
+                # чаты, у которых есть топик-биндинг по событию: их обычные
+                # подписки не шлём вовсе (иначе дубль в General)
+                topic_bound_chat_ids = {t.chat_id for t in topic_bindings}
                 topic_target_keys = {(t.chat_id, t.thread_id) for t in topic_bindings}
                 targets = []
                 for t in topic_bindings:
                     text_t = _render(payload, only_group=t.group.name)
                     if not text_t:
                         continue
-                    d = event_dates[0] if event_dates else None
-                    png = _fetch_day_card(t.group.name, d) if d else None
+                    png = _fetch_day_card(t.group.name, card_date) if card_date else None
                     targets.append((t.chat_id, t.thread_id, text_t, png))
 
                 # 2) Привязка всего чата (не-форумы / General) — без дублей с топиками
@@ -228,12 +234,14 @@ class Command(BaseCommand):
                     targets.append((b.chat_id, b.thread_id, text_b, png))
 
                 # 3) Подписки: каждый подписчик получает ТОЛЬКО свои группы
-                #    (карточка первой своей затронутой группы на дату события),
-                #    в топик, где оформил подписку (форум), иначе общий поток
+                #    (карточка своей затронутой группы на ближайшую дату события),
+                #    в топик, где оформил подписку (форум), иначе общий поток.
+                #    Чаты с топик-биндингом по событию пропускаем: там уже ушло.
                 text_all = _render(payload)  # для админа-страховки
                 sub_chats = set()
                 for s in (Subscription.objects.filter(group__name__in=names)
                           .exclude(chat_id__in=bound_ids)
+                          .exclude(chat_id__in=topic_bound_chat_ids)
                           .select_related("group")):
                     my_names = sorted(set(Subscription.objects.filter(
                         chat_id=s.chat_id, group__name__in=names
@@ -244,10 +252,8 @@ class Command(BaseCommand):
                     key = (s.chat_id, s.thread_id)
                     if key in topic_target_keys:
                         continue
-                    d = event_dates[0] if event_dates else None
-                    png = _fetch_day_card(my_names[0], d) if d else None
+                    png = _fetch_day_card(my_names[0], card_date) if card_date else None
                     targets.append((s.chat_id, s.thread_id, text_s, png))
-                    sub_chats.discard(s.chat_id)
                     sub_chats.add(s.chat_id)
 
                 admin_chat_id = os.getenv("ADMIN_CHAT_ID")
