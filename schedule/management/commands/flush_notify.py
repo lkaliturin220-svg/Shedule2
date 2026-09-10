@@ -245,7 +245,7 @@ class Command(BaseCommand):
                     if key in topic_target_keys:
                         continue
                     d = event_dates[0] if event_dates else None
-                    png = _fetch_day_card(my_names[0], d) if (d and len(my_names) == 1) else None
+                    png = _fetch_day_card(my_names[0], d) if d else None
                     targets.append((s.chat_id, s.thread_id, text_s, png))
                     sub_chats.discard(s.chat_id)
                     sub_chats.add(s.chat_id)
@@ -258,7 +258,11 @@ class Command(BaseCommand):
                         admin_id = None
                     if (admin_id and admin_id not in bound_ids
                             and admin_id not in sub_chats and text_all):
-                        targets.append((admin_id, None, text_all, None))
+                        # админ-страховка тоже карточкой: первая затронутая
+                        # группа на первую дату события
+                        d = event_dates[0] if event_dates else None
+                        png = _fetch_day_card(names[0], d) if d else None
+                        targets.append((admin_id, None, text_all, png))
 
             if not targets:
                 delivered += 1
