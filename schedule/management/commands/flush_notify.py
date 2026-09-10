@@ -63,11 +63,14 @@ def _names(payload):
 
 
 def _render(payload, only_group=None):
-    """Текст события; only_group — оставить в тексте только эту группу."""
+    """Текст события; only_group — оставить в тексте только эти группы
+    (строка, множество групп или None = все)."""
     from html import escape
+    if isinstance(only_group, str):
+        only_group = {only_group}
     if payload.get("type") == "new":
         imported = [(g, d) for g, d, _c in payload["imported"]
-                    if only_group is None or g == only_group]
+                    if only_group is None or g in only_group]
         if not imported:
             return ""
         lines = ["<b>Появилось новое расписание!</b>\n"]
@@ -81,7 +84,7 @@ def _render(payload, only_group=None):
         y, m, dd = d.split("-")
         ds = f"{dd}.{m}.{y}"
         for g, gl in pairs:
-            if only_group is not None and g != only_group:
+            if only_group is not None and g not in only_group:
                 continue
             lines.append(f"<b>⚠️ Расписание на {ds} изменилось</b>")
             lines.append(f"<b>{escape(g)}</b>")
@@ -144,24 +147,23 @@ class Command(BaseCommand):
                     if text_b:
                         targets.append((b.chat_id, b.thread_id, text_b))
 
-                # 3) Подписки — помним топик, где оформили (форум), иначе общий поток
-                sub_chats = set(Subscription.objects.filter(
-                    group__name__in=names
-                ).exclude(chat_id__in=bound_ids).values_list("chat_id", flat=True))
-                text_all = _render(payload)
-                for s in Subscription.objects.filter(
-                        group__name__in=names).exclude(chat_id__in=bound_ids) \
-                        .select_related("group"):
-                    if not text_all:
-                        break
-                    if s.thread_id:
-                        key = (s.chat_id, s.thread_id)
-                        if key in topic_target_keys:
-                            continue
-                        targets.append((s.chat_id, s.thread_id, text_all))
-                    elif s.chat_id in sub_chats:
-                        targets.append((s.chat_id, None, text_all))
-                sub_chats -= {c for c, _t, _x in targets if _t is None}
+                # 3) Подписки: каждый подписчик получает ТОЛЬКО свои группы,
+                #    в топик, где оформил подписку (форум), иначе общий поток
+                text_all = _render(payload)  # для админа-страховки
+                for s in (Subscription.objects.filter(group__name__in=names)
+                          .exclude(chat_id__in=bound_ids)
+                          .select_related("group")):
+                    my_names = set(Subscription.objects.filter(
+                        chat_id=s.chat_id, group__name__in=names
+                    ).values_list("group__name", flat=True))
+                    text_s = _render(payload, only_group=my_names)
+                    if not text_s:
+                        continue
+                    key = (s.chat_id, s.thread_id)
+                    if key in topic_target_keys:
+                        continue
+                    targets.append((s.chat_id, s.thread_id, text_s))
+                    sub_chats.discard(s.chat_id)
 
                 admin_chat_id = os.getenv("ADMIN_CHAT_ID")
                 if admin_chat_id:
