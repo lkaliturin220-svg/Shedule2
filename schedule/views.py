@@ -627,6 +627,8 @@ def student_register(request):
                 errors.extend(ve.messages)
         if password != password2:
             errors.append("Пароли не совпадают.")
+        if request.POST.get("consent") != "on":
+            errors.append("Нужно согласие с Пользовательским соглашением и обработкой персональных данных.")
         if not invite_raw:
             errors.append("Введите инвайт-код.")
 
