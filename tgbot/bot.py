@@ -130,12 +130,6 @@ def _groups_kb(prefix: str, groups: list, with_date: bool = True) -> InlineKeybo
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _topic_kwargs(message: Message) -> dict:
-    """В форум-чатах — ответ в тот же топик, откуда пришла команда."""
-    tid = getattr(message, "message_thread_id", None)
-    return {"message_thread_id": tid} if tid else {}
-
-
 def main_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -375,7 +369,6 @@ async def cb_sub_add(call: CallbackQuery):
             f"Как только появится новое расписание — пришлю автоматически{where}.\n"
             f"Управление подписками: кнопка <b>🔔 Мои подписки</b>",
             parse_mode="HTML",
-            **_topic_kwargs(call.message),
         )
     else:
         await call.answer(f"⚠️ Не смог оформить подписку на {group}", show_alert=True)
@@ -534,11 +527,10 @@ async def cmd_bind(message: Message):
     if not await _is_chat_admin(message):
         return await message.answer(
             "🔒 Привязывать чат к группе могут только админы чата.",
-            **_topic_kwargs(message),
         )
     groups = (await api_get("/api/groups/")).get("groups", [])
     if not groups:
-        return await message.answer("⚠️ Нет данных о группах. Попробуй позже.", **_topic_kwargs(message))
+        return await message.answer("⚠️ Нет данных о группах. Попробуй позже.")
 
     hint = ""
     if message.chat.is_forum:
@@ -554,7 +546,6 @@ async def cmd_bind(message: Message):
         "Обновления будут приходить <b>только по ней</b>." + hint,
         reply_markup=_groups_kb("bind", groups, with_date=False),
         parse_mode="HTML",
-        **_topic_kwargs(message),
     )
 
 
@@ -597,25 +588,23 @@ async def cb_bind(call: CallbackQuery):
             f"Обновления — <b>только по этой группе</b>, пришлю {where}.\n"
             f"Сменить группу — /bind, топик — /settopic, отвязать — /unbind."
         )
-    await call.message.answer(text, parse_mode="HTML", **_topic_kwargs(call.message))
+    await call.message.answer(text, parse_mode="HTML")
     await call.answer()
 
 
 @router.message(Command("settopic"))
 async def cmd_settopic(message: Message):
     if not await _is_chat_admin(message):
-        return await message.answer("🔒 Менять топик могут только админы чата.", **_topic_kwargs(message))
+        return await message.answer("🔒 Менять топик могут только админы чата.")
     if not message.chat.is_forum:
         return await message.answer(
             "Этот чат — не форум: топиков нет, обновления идут в общий поток.",
-            **_topic_kwargs(message),
         )
     thread = getattr(message, "message_thread_id", None)
     if thread is None:
         return await message.answer(
             "Напиши эту команду внутри нужного топика — я привяжу его.\n"
             "(В форуме проще: /bind внутри топика привяжет его к группе.)",
-            **_topic_kwargs(message),
         )
     loop = asyncio.get_event_loop()
     ok   = await loop.run_in_executor(None, _set_thread, message.chat.id, thread)
@@ -623,10 +612,9 @@ async def cmd_settopic(message: Message):
         await message.answer(
             "✅ Обновления расписания будут приходить в этот топик.\n"
             "Хочешь разные группы по топикам — /bind внутри каждого топика.",
-            **_topic_kwargs(message),
         )
     else:
-        await message.answer("⚠️ Сначала привяжи чат к группе: /bind", **_topic_kwargs(message))
+        await message.answer("⚠️ Сначала привяжи чат к группе: /bind")
 
 
 @router.message(Command("binding"))
@@ -643,7 +631,6 @@ async def cmd_binding(message: Message):
     if not b and not topics:
         return await message.answer(
             "Этот чат не привязан. /bind — привязать чат или топик к расписанию группы.",
-            **_topic_kwargs(message),
         )
 
     lines = ["📌 <b>Привязки этого чата:</b>\n"]
@@ -656,13 +643,13 @@ async def cmd_binding(message: Message):
         "\nОбновления приходят только по привязанным группам.\n"
         "/bind — привязать/сменить (в форуме — текущий топик), /unbind — отвязать."
     )
-    await message.answer("\n".join(lines), parse_mode="HTML", **_topic_kwargs(message))
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("unbind"))
 async def cmd_unbind(message: Message):
     if not await _is_chat_admin(message):
-        return await message.answer("🔒 Отвязывать чат могут только админы чата.", **_topic_kwargs(message))
+        return await message.answer("🔒 Отвязывать чат могут только админы чата.")
 
     chat    = message.chat
     thread  = getattr(message, "message_thread_id", None)
@@ -680,12 +667,10 @@ async def cmd_unbind(message: Message):
     if deleted:
         await message.answer(
             f"✅ {target.capitalize()} отвязан" + (" (в форуме — текущий топик)." if chat.is_forum else " — обновления больше не приходят."),
-            **_topic_kwargs(message),
         )
     else:
         await message.answer(
             "Этот топик и не был привязан." if (chat.is_forum and thread) else "Этот чат и не был привязан.",
-            **_topic_kwargs(message),
         )
 
 
