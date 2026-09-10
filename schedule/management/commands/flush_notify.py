@@ -258,11 +258,9 @@ class Command(BaseCommand):
                         admin_id = None
                     if (admin_id and admin_id not in bound_ids
                             and admin_id not in sub_chats and text_all):
-                        # админ-страховка тоже карточкой: первая затронутая
-                        # группа на первую дату события
-                        d = event_dates[0] if event_dates else None
-                        png = _fetch_day_card(names[0], d) if d else None
-                        targets.append((admin_id, None, text_all, png))
+                        # админ-страховка — ВСЕГДА текстом (надёжный фоллбек,
+                        # текст читается при любом сбое рендера/сети)
+                        targets.append((admin_id, None, text_all, None))
 
             if not targets:
                 delivered += 1
