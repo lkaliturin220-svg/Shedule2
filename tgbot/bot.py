@@ -676,11 +676,40 @@ async def cmd_unbind(message: Message):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+async def _setup_commands():
+    """Регистрация команд — они появятся в меню Telegram (кнопка «Меню»)."""
+    from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
+
+    private = [
+        BotCommand(command="start", description="🏠 Главное меню"),
+        BotCommand(command="groups", description="📚 Расписание групп"),
+        BotCommand(command="teachers", description="👨‍🏫 Расписание преподавателей"),
+        BotCommand(command="subscribe", description="🔔 Мои подписки"),
+        BotCommand(command="unsubscribe", description="🔕 Отписаться от всех"),
+        BotCommand(command="help", description="ℹ️ Помощь"),
+    ]
+    group = [
+        BotCommand(command="bind", description="📌 Привязать чат/топик к группе"),
+        BotCommand(command="binding", description="📌 Текущие привязки чата"),
+        BotCommand(command="settopic", description="🧵 Слать обновления в этот топик"),
+        BotCommand(command="unbind", description="✖️ Отвязать чат/топик"),
+        BotCommand(command="groups", description="📚 Расписание групп"),
+        BotCommand(command="help", description="ℹ️ Помощь"),
+    ]
+    await bot.set_my_commands(private, scope=BotCommandScopeAllPrivateChats())
+    await bot.set_my_commands(group, scope=BotCommandScopeAllGroupChats())
+
+
 async def main():
     if not TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN не задан!")
         return
     _setup_django()
+    try:
+        await _setup_commands()
+        logger.info("Команды зарегистрированы (личка + группы)")
+    except Exception as e:
+        logger.warning("set_my_commands failed: %s", e)
     logger.info("Telegram bot starting…")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
