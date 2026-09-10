@@ -150,6 +150,7 @@ class Command(BaseCommand):
                 # 3) Подписки: каждый подписчик получает ТОЛЬКО свои группы,
                 #    в топик, где оформил подписку (форум), иначе общий поток
                 text_all = _render(payload)  # для админа-страховки
+                sub_chats = set()
                 for s in (Subscription.objects.filter(group__name__in=names)
                           .exclude(chat_id__in=bound_ids)
                           .select_related("group")):
